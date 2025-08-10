@@ -1,4 +1,6 @@
-# pmtiles-mosaic
+# Pmtiles Mosaic
+[![PyPI - Latest version](https://img.shields.io/pypi/v/pmtiles_mosaic)](https://pypi.org/project/pmtiles_mosaic/) [![GitHub Tag](https://img.shields.io/github/v/tag/ramSeraph/pmtiles_mosaic?filter=v*)](https://github.com/ramSeraph/pmtiles_mosaic/releases/latest)
+
 
 Tools to partition and rejoin PMTiles files as mosaics.
 
