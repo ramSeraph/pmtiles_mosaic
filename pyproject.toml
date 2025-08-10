@@ -1,0 +1,45 @@
+[project]
+name = "pmtiles_mosaic"
+version = "0.1.0"
+description = "Tools to partition and rejoin PMTiles files as mosaics"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "mercantile>=1.2.1",
+    "pmtiles==3.4.1",
+]
+authors = [
+    { name = "Sreeram Kandimalla", email = "kandimalla.sreeram@gmail.com" },
+]
+
+[project.urls]
+homepage = "https://github.com/ramSeraph/pmtiles_mosaic"
+repository = "https://github.com/ramSeraph/pmtiles_mosaic.git"
+
+[project.scripts]
+download-mosaic = "pmtiles_mosaic.download_mosaic:cli"
+partition = "pmtiles_mosaic.partition:cli"
+partition-basic = "pmtiles_mosaic.partition_basic:cli"
+
+[build-system]
+requires = [
+    "hatchling",
+    "hatch-vcs"
+]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "pmtiles_mosaic/_version.py"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "pmtiles_mosaic",
+]
+
+[tool.hatch.build.targets.wheel]
+include = [
+    "pmtiles_mosaic",
+]
