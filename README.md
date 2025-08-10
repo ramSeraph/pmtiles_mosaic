@@ -115,3 +115,26 @@ The partitioning scripts read tile data from one or more sources, determine the 
     *   **Note:** This basic strategy has limitations. The size of the final PMTiles file is an estimate based on the raw tile data size and does not account for compression or the PMTiles header/directory overhead, so partitions may exceed the target size. Furthermore, if a single vertical (X) stripe is larger than the size limit, the script will fail for that stripe.
 
 After partitioning, both scripts generate a `.mosaic.json` file. This file contains the metadata for the entire tileset and a list of the generated PMTiles partitions along with their bounding boxes and zoom ranges. This allows clients that support the mosaic format to request tiles seamlessly from the correct partition. For more details, see the [**Mosaic JSON Specification (spec.md)**](./spec.md).
+
+
+## Tile Sources
+
+The `pmtiles_mosaic.tile_sources` module provides classes for reading tiles from different sources.
+
+-   `DiskTilesSource`: Reads tiles from a directory on the local disk.
+-   `MBTilesSource`: Reads tiles from an MBTiles file.
+-   `PMTilesSource`: Reads tiles from a PMTiles file.
+-   `StackedTileSource`: Combines multiple tile sources (Disk, MBTiles, PMTiles) into a single logical source, allowing for seamless access across different storage types.
+
+## Client Code
+
+The only known implementation of a javascript client for the mosaics is in [indianopenmaps](https://github.com/ramSeraph/indianopenmaps/blob/main/server/mosaic_handler.js)
+
+
+## Contributing
+
+Contributions are welcome! If you find a bug or have a feature request, please open an issue or submit a pull request.
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](./LICENSE) file for details.
