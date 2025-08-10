@@ -9,26 +9,39 @@ This file provides the necessary information for a client to understand how a si
 The `mosaic.json` file consists of a single JSON object with the following top-level properties:
 
 - `version` (Number): The version of the mosaic specification. Currently `1`.
-- `metadata` (Object): The combined metadata object from the original source tileset, which is passed through to the client. This typically includes information like `name`, `description`, `attribution`, `format`, and `vector_layers`(optional).
+- `metadata` (Object): The combined metadata object from the original source tileset. See the [Metadata Object](#metadata-object) section for details.
 - `header` (Object): A header object that describes the properties of the entire, combined tileset, as if it were a single PMTiles file. See the [Header Object](#header-object) section for details.
 - `slices` (Object): An object containing an entry for each partition or slice of the tileset. The keys are the relative file paths to the individual PMTiles partition files, and the values are [Slice Objects](#slice-object).
 
 > [!NOTE]
-> The `metadata` and `header` objects are structured to match the [PMTiles Specification v3](https://github.com/protomaps/PMTiles/blob/main/spec/v3/spec.md) though filtered to only the values used in the clients.
+> The `metadata` and `header` objects are structured to match the [PMTiles Specification v3](https://github.com/protomaps/PMTiles/blob/main/spec/v3/spec.md), though filtered to only the values necessary for client-side rendering.
+
+### Metadata Object
+
+The `metadata` object contains information about the tileset, passed through from the original source. The following fields are collected and included:
+
+- `name` (String): The human-readable name of the tileset.
+- `description` (String): A description of the content of the tileset.
+- `attribution` (String): The attribution to display when the map is shown to a user.
+- `format` (String): The tile format, e.g., `pbf`, `png`, `jpeg`, `webp`.
+- `type` (String): The type of tileset, e.g., `overlay` or `baselayer`.
+- `version` (String): The version of the tileset.
+- `vector_layers` (Array): An array of objects, one for each vector layer, describing the fields and zoom levels for that layer. This is only present for vector tiles.
 
 ### Header Object
 
-The header object contains the following keys, which conform to the PMTiles header specification:
+The `header` object contains the core properties of the entire tileset, conforming to the PMTiles header specification.
 
 - `min_lon_e7`, `min_lat_e7`, `max_lon_e7`, `max_lat_e7` (Number): The bounding box of the entire tileset in E7 format (degrees * 10^7).
 - `min_zoom`, `max_zoom` (Number): The minimum and maximum zoom levels available in the entire tileset.
-- `center_lon_e7`, `center_lat_e7`, `center_zoom` (Number): The suggested center longitude, latitude, and zoom level for viewing the map.
-- `tile_type` (Number): The tile format (e.g., 1 for MVT, 2 for PNG, 3 for JPEG).
-- `tile_compression` (Number): The compression used for the tiles (e.g., 1 for Gzip, 0 for None).
+- `center_lon_e7`, `center_lat_e7` (Number): The suggested center longitude and latitude for viewing the map.
+- `center_zoom` (Number): The suggested zoom level for the center of the map.
+- `tile_type` (Number): An enum representing the tile format (e.g., `1` for MVT/PBF, `2` for PNG, `3` for JPEG).
+- `tile_compression` (Number): An enum representing the compression used for the tiles (e.g., `1` for Gzip, `0` for None).
 
 ### Slice Object
 
-Each entry in the top-level `slices` object is a slice object, which contains a `header` for that specific partition.
+Each entry in the top-level `slices` object is a "slice object," which describes a single partition of the tileset.
 
 - `header` (Object): A header object describing the contents of this specific slice. It contains a subset of the main header fields:
     - `min_lon_e7`, `min_lat_e7`, `max_lon_e7`, `max_lat_e7` (Number): The bounding box of this specific slice. These coordinates correspond to the bounds of the tiles at the `min_zoom` level of the slice, which provides a consistent bounding box for the entire slice.

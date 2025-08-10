@@ -24,6 +24,16 @@ pip install git+https://github.com/ramSeraph/pmtiles_mosaic.git
 
 The scripts provided by this package are `partition`, `partition-basic`, and `download-mosaic`.
 
+### Running with `uvx`
+
+If you have `uv` installed, you can run the scripts without installing the package using `uvx`:
+
+```bash
+uvx --from pmtiles_mosaic partition --from-source <source> --to-pmtiles <output.pmtiles>
+uvx --from pmtiles_mosaic partition-basic --from-source <source> --to-pmtiles <output.pmtiles>
+uvx --from pmtiles_mosaic download-mosaic --mosaic-url <url> --output-file <output>
+```
+
 ### `download-mosaic`
 
 This script downloads all the PMTiles partitions listed in a remote mosaic JSON file and merges them into a single, local archive file (either `.mbtiles` or `.pmtiles`). This is useful for reassembling a partitioned tileset for local use or for creating a single-file distribution.
