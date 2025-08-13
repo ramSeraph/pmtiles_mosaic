@@ -272,6 +272,7 @@ class CheckpointablePMTilesWriter:
 
     def finalize(self, pmtiles_fname):
         self.writer.f.close()
+        Path(pmtiles_fname).parent.mkdir(parents=True, exist_ok=True)
         self.writer.f = open(pmtiles_fname, 'wb')
         header, header_for_mosaic, metadata = get_header_and_metadata(self.header_base, self.metadata, self.tiles)
         self.writer.finalize(header, metadata)
