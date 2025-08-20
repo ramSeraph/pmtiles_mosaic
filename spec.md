@@ -54,7 +54,11 @@ Each entry in the top-level `slices` object is a "slice object," which describes
   "version": 1,
   "metadata": {
     "name": "My Awesome Map",
+    "description": "A description of the content of the tileset.",
+    "attribution": "Attribution required to be displayed.",
     "format": "pbf",
+    "type": "baselayer",
+    "version": "1",
     "vector_layers": [
       {
         "id": "landuse",
