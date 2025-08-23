@@ -1,6 +1,6 @@
 [project]
 name = "pmtiles_mosaic"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Tools to partition and rejoin PMTiles files as mosaics"
 readme = "README.md"
 requires-python = ">=3.12"
