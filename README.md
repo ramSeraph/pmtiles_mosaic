@@ -132,6 +132,9 @@ The `pmtiles_mosaic.tile_sources` module provides classes for reading tiles from
 
 The only known implementation of a javascript client for the mosaics is in [indianopenmaps](https://github.com/ramSeraph/indianopenmaps/blob/main/server/mosaic_handler.js)
 
+> [!NOTE]
+> Atomicity of updates is something that you need to think about for writing a proper client( the above client doesn't handle it ). See relevant discussion [here](https://github.com/protomaps/PMTiles/discussions/465#discussioncomment-10758150)
+
 
 ## Contributing
 
