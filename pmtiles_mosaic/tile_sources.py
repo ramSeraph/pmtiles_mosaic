@@ -28,6 +28,9 @@ def create_source_from_paths(source_paths):
     if not sources:
         raise ValueError("No valid sources provided.")
 
+    if len(sources) == 1:
+        return sources[0]
+
     return StackedTileSource(sources)
 
 
