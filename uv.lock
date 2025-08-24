@@ -102,7 +102,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/21/69/5c2e4eb58aaf6303a
 
 [[package]]
 name = "pmtiles-mosaic"
-version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "mercantile" },
