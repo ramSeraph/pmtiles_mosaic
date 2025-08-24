@@ -35,7 +35,7 @@ class DiskTilesSource:
 
         return file.stat().st_size
         
-    def for_all_z(self, z):
+    def all_z_sizes(self, z):
         for file in self.dir.glob(f'{z}/*/*.{self.ext}'):
             tile = self._get_tile_from_file(file)
             fstats = file.stat()

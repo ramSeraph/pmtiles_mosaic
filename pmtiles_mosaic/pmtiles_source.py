@@ -51,7 +51,7 @@ class PMTilesSource:
         data = self.get_tile_data(tile)
         return len(data)
  
-    def for_all_z(self, z):
+    def all_z_sizes(self, z):
         for t, size in all_tile_sizes(self.reader.get_bytes):
             if t[0] == z:
                 tile = mercantile.Tile(x=t[1], y=t[2], z=t[0])

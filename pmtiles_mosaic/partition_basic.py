@@ -126,7 +126,7 @@ class Partitioner:
         tiles = []
         size = 0
 
-        for tile, tsize in self.reader.for_all_z(zoom_level):
+        for tile, tsize in self.reader.all_z_sizes(zoom_level):
             tiles.append(tile)
             size += tsize
 

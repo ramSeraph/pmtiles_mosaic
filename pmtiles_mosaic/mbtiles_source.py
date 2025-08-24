@@ -26,7 +26,7 @@ class MBTilesSource:
         data = self.get_tile_data(tile)
         return len(data)
  
-    def for_all_z(self, z):
+    def all_sizes_z(self, z):
         res = self.con.execute(f'select tile_column, tile_row, length(tile_data) from tiles where zoom_level={z};')
         while True:
             t = res.fetchone()
@@ -48,7 +48,7 @@ class MBTilesSource:
             tile = mercantile.Tile(x=x, y=y, z=z)
             yield (tile, data)
 
-    def all_sizes(self):
+    def all_z_sizes(self):
         res = self.con.execute('select zoom_level, tile_column, tile_row, length(tile_data) from tiles;')
         while True:
             t = res.fetchone()

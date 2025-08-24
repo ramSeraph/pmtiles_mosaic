@@ -21,11 +21,11 @@ class StackedTileSource:
                 continue
         raise MissingTileError()
 
-    def for_all_z(self, z):
+    def all_z_sizes(self, z):
         seen = set()
         for i, src in enumerate(self.srcs):
             #print(f'iterating over source {i} for {z}')
-            for (tile, size) in src.for_all_z(z):
+            for (tile, size) in src.all_z_sizes(z):
                 if tile in seen:
                     continue
                 seen.add(tile)
