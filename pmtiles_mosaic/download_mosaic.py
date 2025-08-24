@@ -134,6 +134,11 @@ def get_filename_from_url(url):
     url_parsed = urlparse(url)
     return unquote(PurePosixPath(url_parsed.path).name)
 
+def is_local(url):
+    url_parsed = urlparse(url)
+    return url_parsed.scheme in ('', 'file')
+ 
+
 class Merger:
     def __init__(self, mosaic_url, archive_type, output_file, request_timeout_secs, num_http_retries):
         self.session = self.get_session(num_http_retries)
@@ -142,7 +147,6 @@ class Merger:
         self.output_file = output_file
         self.output_dir = output_file.parent
         self.tracker_file = self.output_dir / 'tracker.txt'
-        self.mosaic_file = self.output_dir / get_filename_from_url(mosaic_url)
 
         self.archive_type = archive_type
         self.archive_writer = self.get_archive_writer()
@@ -151,6 +155,20 @@ class Merger:
         self.mosaic_data = None
         self.mosaic_version = 0
         self.done_stages = set()
+
+    def get_file_from_url(self, url):
+        if is_local(url):
+            file = Path(urlparse(url).path)
+        else:
+            file = self.output_dir / get_filename_from_url(url)
+
+        return file
+
+    def get_mosaic_file(self):
+        return self.get_file_from_url(self.mosaic_url)
+
+    def get_pmtiles_file(self, pmtiles_url):
+        return self.get_file_from_url(pmtiles_url)
 
     def get_archive_writer(self):
         if self.archive_type == 'mbtiles':
@@ -172,13 +190,15 @@ class Merger:
         session.mount('http://', HTTPAdapter(max_retries=retry))
         session.mount('https://', HTTPAdapter(max_retries=retry))
         return session
- 
-    def get_mosaic(self, mosaic_url):
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        if not self.mosaic_file.exists():
-            self.download_file(mosaic_url, self.mosaic_file)
+
+    def populate_mosaic(self, mosaic_url):
+        mosaic_file = self.get_mosaic_file()
+
+        if not is_local(mosaic_url) and not mosaic_file.exists():
+            self.output_dir.mkdir(parents=True, exist_ok=True)
+            self.download_file(mosaic_url, mosaic_file)
     
-        self.mosaic_data = json.loads(self.mosaic_file.read_text())
+        self.mosaic_data = json.loads(mosaic_file.read_text())
 
 
     def download_file(self, url, file):
@@ -260,7 +280,7 @@ class Merger:
 
 
     def process(self):
-        self.get_mosaic(self.mosaic_url)
+        self.populate_mosaic(self.mosaic_url)
         if 'version' in self.mosaic_data:
             self.mosaic_version = self.mosaic_data['version']
 
@@ -281,17 +301,19 @@ class Merger:
                 print(f'Stage {k} already done, skipping')
                 continue
 
-            pmtiles_file = self.output_dir / get_filename_from_url(pmtiles_url)
-            if pmtiles_file.exists():
-                raise Exception(f'{pmtiles_file} already exists, delete existing file to continue')
+            pmtiles_file = self.get_pmtiles_file(pmtiles_url)
+            if not is_local(pmtiles_url):
+                if pmtiles_file.exists():
+                    raise Exception(f'local copy of {pmtiles_url} exists at {pmtiles_file}, delete existing file to continue')
 
-            self.download_file(pmtiles_url, pmtiles_file)
+                self.download_file(pmtiles_url, pmtiles_file)
             
             self.add_pmtiles(pmtiles_file)
 
             self.mark_as_done(k)
 
-            pmtiles_file.unlink()
+            if not is_local(pmtiles_url):
+                pmtiles_file.unlink()
 
         metadata, header = self.get_metadata_and_header()
         self.archive_writer.finalize(metadata, header)
@@ -301,14 +323,15 @@ class Merger:
             self.tracker_file.unlink()
             print('Tracker file deleted.')
 
-        if self.mosaic_file.exists():
-            self.mosaic_file.unlink()
+        mosaic_file = self.get_mosaic_file()
+        if not is_local(self.mosaic_url) and mosaic_file.exists():
+            mosaic_file.unlink()
             print('Mosaic file deleted.')
 
 def cli():
     import argparse
     parser = argparse.ArgumentParser(description='Download a mosaic and convert it to MBTiles or PMTiles format.')
-    parser.add_argument('--mosaic-url',  '-u', required=True, type=str, help='URL of the mosaic JSON file')
+    parser.add_argument('--mosaic-url',  '-u', required=True, type=str, help='URL or local path of the mosaic JSON file')
     parser.add_argument('--output-file', '-o', type=str, help='Output MBTiles/PMTiles file name. The format is inferred from the extension.')
     parser.add_argument('--archive-type', '-a', choices=['mbtiles', 'pmtiles'], help='Type of archive to create. Required if --output-file is not provided.')
     parser.add_argument('--request-timeout-secs', '-t', type=int, default=60, help='Timeout for HTTP requests in seconds')

@@ -33,22 +33,23 @@ If you have `uv` installed, you can run the scripts without installing the packa
 ```bash
 uvx --from pmtiles_mosaic partition --from-source <source> --to-pmtiles <output.pmtiles>
 uvx --from pmtiles_mosaic partition-basic --from-source <source> --to-pmtiles <output.pmtiles>
-uvx --from pmtiles_mosaic download-mosaic --mosaic-url <url> --output-file <output>
+uvx --from pmtiles_mosaic download-mosaic --mosaic-url <url_or_path> --output-file <output>
 ```
 
 ### `download-mosaic`
 
-This script downloads all the PMTiles partitions listed in a remote mosaic JSON file and merges them into a single, local archive file (either `.mbtiles` or `.pmtiles`). This is useful for reassembling a partitioned tileset for local use or for creating a single-file distribution.
+This script reads all the PMTiles partitions listed in a mosaic JSON file (remote or local) and merges them into a single, local archive file (either `.mbtiles` or `.pmtiles`). This is useful for reassembling a partitioned tileset for local use or for creating a single-file distribution.
 
 ```bash
 download-mosaic \
-    --mosaic-url <url_to_mosaic.json> \
+    --mosaic-url <url_or_path_to_mosaic.json> \
     --output-file <output_file.mbtiles>
 ```
 
 **Arguments:**
 
-*   `--mosaic-url`, `-u`: **(Required)** The URL of the remote `.mosaic.json` file.
+*   `--mosaic-url`, `-u`: **(Required)** The URL or local path of the `.mosaic.json` file.
+
 *   `--output-file`, `-o`: The path for the final output file. The desired archive format is inferred from the file extension (`.mbtiles` or `.pmtiles`). If not provided, the output filename is derived from the mosaic URL.
 *   `--archive-type`, `-a`: The type of archive to create (`mbtiles` or `pmtiles`). This is only required if the output file cannot be determined from the `--output-file` argument.
 *   `--request-timeout-secs`, `-t`: Timeout for HTTP requests in seconds (default: 60).
