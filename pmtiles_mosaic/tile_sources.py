@@ -104,7 +104,7 @@ class DiskTilesSource:
         return max(zoom_levels)
 
     def get_tilejson_file(self):
-        return self.dir / 'tiles.json'
+        return self.dir / 'metadata.json'
 
     def get_full_metadata(self):
         tilejson_file = self.get_tilejson_file()
