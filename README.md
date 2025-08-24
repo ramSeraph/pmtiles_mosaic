@@ -80,6 +80,16 @@ partition \
     *   Defaults to `github_release`.
 *   `--no-cache`: By default, the tool caches tile data in a temporary file to speed up processing. Use this flag to disable caching.
 
+#### Merging Multiple Sources
+
+When you provide multiple `--from-source` arguments, the script combines them into a single logical tileset. This is useful for patching, updating, or merging different tilesets. The order of the sources is important.
+
+*   **Tile Data:** If a tile exists in more than one source, the tile from the *first* source specified on the command line will be used. For example, if you run `partition --from-source A --from-source B ...`, and a tile exists in both `A` and `B`, the one from `A` will be included in the output. This allows you to overlay or patch a base tileset with updates.
+
+*   **Metadata:** The metadata for the final partitioned tileset is also merged:
+    *   For most metadata fields (like `name`, `description`, `attribution`, etc.), the value from the first source that contains that field is used.
+    *   The `vector_layers` metadata is handled differently. It is merged from all sources. If multiple sources define a vector layer with the same `id`, their definitions are combined. The `minzoom` will be the minimum of all definitions, and the `maxzoom` will be the maximum, effectively expanding the layer's visibility to cover the full range of all sources.
+
 ### `partition-basic`
 
 > [!NOTE]
@@ -124,7 +134,7 @@ After partitioning, both scripts generate a `.mosaic.json` file. This file conta
 
 The `pmtiles_mosaic.tile_sources` module provides classes for reading tiles from different sources.
 
--   `DiskTilesSource`: Reads tiles from a directory on the local disk.
+-   `DiskTilesSource`: Reads tiles from a directory on the local disk. It requires a `metadata.json` file in the root of the directory (conforming to the TileJSON spec). While other fields may be present, only the following are used: `type`, `format`, `attribution`, `description`, `name`, `version`, and `vector_layers`. The `format` key is particularly important as it determines the tile file extension (e.g., `png`, `pbf`). The `minzoom` and `maxzoom` are also read from this file; if they are not present, the tool will scan the directory structure to determine the zoom range, which can be slow on large tilesets.
 -   `MBTilesSource`: Reads tiles from an MBTiles file.
 -   `PMTilesSource`: Reads tiles from a PMTiles file.
 -   `StackedTileSource`: Combines multiple tile sources (Disk, MBTiles, PMTiles) into a single logical source, allowing for seamless access across different storage types.
