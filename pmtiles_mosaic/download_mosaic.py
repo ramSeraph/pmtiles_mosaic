@@ -5,18 +5,19 @@
 #     "mercantile",
 #     "pmtiles",
 #     "requests",
+#     "pypdl",
 # ]
 # ///
 
+import os
 import json
+import pickle
 import sqlite3
 
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlparse, urljoin, unquote
 
-import requests
-from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
+import pypdl
 
 from pmtiles.reader import Reader, MmapSource, all_tiles
 from pmtiles.writer import Writer
@@ -26,19 +27,72 @@ from pmtiles.tile import zxy_to_tileid, Compression, TileType
 # and https://github.com/mapbox/mbutil/blob/master/mbutil/util.py
 
 class PmtilesArchiveWriter:
-    def __init__(self, output_file):
+    def __init__(self, output_file, force=False):
         self.pmtiles_writer = None
         self.output_file = output_file
+        self.tile_file = None
+        self.meta_file = None
+        self.force = force
 
     def init(self):
+        tile_file = self.output_file.with_suffix('.tiles.bin')
+        meta_file = self.output_file.with_suffix('.meta.pkl')
+
+        if self.force:
+            print("Force flag is active. Cleaning up pmtiles writer leftover files.")
+            if tile_file.exists():
+                print(f"Deleting {tile_file}")
+                tile_file.unlink()
+            if meta_file.exists():
+                print(f"Deleting {meta_file}")
+                meta_file.unlink()
+
         self.pmtiles_writer = Writer(open(self.output_file, 'wb'))
+
+        self.pmtiles_writer.tile_f = open(tile_file, 'a+b')
+        self.tile_file = tile_file
+
+        meta_file = self.output_file.with_suffix('.meta.pkl')
+        self.meta_file = meta_file
+        if not meta_file.exists():
+            self.dump_meta()
+            return
+
+        print(f'Resuming from existing tile file {tile_file} and meta file {meta_file}')
+        meta = pickle.loads(meta_file.read_bytes())
+        self.pmtiles_writer.tile_entries = meta['tile_entries']
+        self.pmtiles_writer.hash_to_offset = meta['hash_to_offset']
+        self.pmtiles_writer.offset = meta['offset']
+        self.pmtiles_writer.addressed_tiles = meta['addressed_tiles']
+        self.pmtiles_writer.clustered = meta['clustered']
+
+        tile_file_size = self.tile_file.stat().st_size
+        if tile_file_size != self.pmtiles_writer.offset:
+            print(f'Warning: Truncating {self.tile_file} from {tile_file_size} to {self.pmtiles_writer.offset}')
+            self.pmtiles_writer.tile_f.seek(self.pmtiles_writer.offset)
+            self.pmtiles_writer.tile_f.truncate()
+
+
+    def prepare(self):
+        pass
 
     def add_to_archive(self, zxy, tile_data):
         tile_id = zxy_to_tileid(zxy[0], zxy[1], zxy[2])
         self.pmtiles_writer.write_tile(tile_id, tile_data)
 
+    def dump_meta(self):
+        meta = {
+            "tile_entries": self.pmtiles_writer.tile_entries,
+            "hash_to_offset": self.pmtiles_writer.hash_to_offset,
+            "offset": self.pmtiles_writer.offset,
+            "addressed_tiles": self.pmtiles_writer.addressed_tiles,
+            "clustered": self.pmtiles_writer.clustered,
+        }
+        self.meta_file.write_bytes(pickle.dumps(meta))
+
     def commit(self):
-        pass
+        self.dump_meta()
+        self.pmtiles_writer.tile_f.flush()
 
     def enhance_header(self, h):
         h['tile_compression'] = Compression(h['tile_compression'])
@@ -48,18 +102,22 @@ class PmtilesArchiveWriter:
     def finalize(self, metadata, header):
         self.enhance_header(header)
         self.pmtiles_writer.finalize(header, metadata)
+        self.tile_file.unlink()
+        self.meta_file.unlink()
 
 
 class MbtilesArchiveWriter:
-    def __init__(self, output_file):
+    def __init__(self, output_file, force=False):
         self.conn = None
         self.cursor = None
         self.output_file = output_file
+        self.force = force
 
     def init(self):
         self.conn = sqlite3.connect(self.output_file)
         self.cursor = self.conn.cursor()
-        
+
+    def prepare(self):
         self.cursor.execute("""PRAGMA synchronous=0""")
         self.cursor.execute("""PRAGMA locking_mode=EXCLUSIVE""")
         self.cursor.execute("""PRAGMA journal_mode=DELETE""")
@@ -140,13 +198,14 @@ def is_local(url):
  
 
 class Merger:
-    def __init__(self, mosaic_url, archive_type, output_file, request_timeout_secs, num_http_retries):
-        self.session = self.get_session(num_http_retries)
+    def __init__(self, mosaic_url, archive_type, output_file, request_timeout_secs, num_http_retries, force=False):
         self.request_timeout_secs = request_timeout_secs
+        self.num_http_retries = num_http_retries
+        self.force = force
 
         self.output_file = output_file
         self.output_dir = output_file.parent
-        self.tracker_file = self.output_dir / 'tracker.txt'
+        self.tracker_file = self.output_file.with_suffix('.tracker.txt')
 
         self.archive_type = archive_type
         self.archive_writer = self.get_archive_writer()
@@ -172,24 +231,12 @@ class Merger:
 
     def get_archive_writer(self):
         if self.archive_type == 'mbtiles':
-            return MbtilesArchiveWriter(self.output_file)
+            return MbtilesArchiveWriter(self.output_file, force=self.force)
 
         if self.archive_type == 'pmtiles':
-            return PmtilesArchiveWriter(self.output_file)
+            return PmtilesArchiveWriter(self.output_file, force=self.force)
 
         raise ValueError(f'Unsupported archive type: {self.archive_type}')
-
-    def get_session(self, num_http_retries):
-        session = requests.session()
-        retries = num_http_retries
-        retry = Retry(
-            total=retries,
-            read=retries,
-            connect=retries,
-        )
-        session.mount('http://', HTTPAdapter(max_retries=retry))
-        session.mount('https://', HTTPAdapter(max_retries=retry))
-        return session
 
     def populate_mosaic(self, mosaic_url):
         mosaic_file = self.get_mosaic_file()
@@ -203,11 +250,13 @@ class Merger:
 
     def download_file(self, url, file):
         print(f'downloading {url} to {file}')
-        resp = self.session.get(url, stream=True, timeout=self.request_timeout_secs)
-        with open(file, 'wb') as f:
-            for data in resp.iter_content(chunk_size=4096):
-                f.write(data)
-   
+        dl = pypdl.Pypdl()
+        dl.start(url=url, 
+                 file_path=str(file),
+                 multisegment=False,
+                 retries=self.num_http_retries, 
+                 timeout=self.request_timeout_secs) 
+
     def init_tracker(self):
         if not self.tracker_file.exists():
             self.tracker_file.write_text("")
@@ -227,7 +276,27 @@ class Merger:
     def get_pmtiles_url(self, k):
         if self.mosaic_version == 0 and k.startswith('../'):
             k = k[3:]
+
+        if is_local(self.mosaic_url):
+            return str(Path(self.mosaic_url).parent / k)
+
         return urljoin(self.mosaic_url, k)
+
+    def force_cleanup(self):
+        print("Force flag is active. Cleaning up leftover files.")
+        files_to_delete = [
+            self.output_file,
+            self.tracker_file,
+        ]
+
+        mosaic_file = self.get_mosaic_file()
+        if not is_local(self.mosaic_url):
+            files_to_delete.append(mosaic_file)
+
+        for f in files_to_delete:
+            if f.exists():
+                print(f"Deleting {f}")
+                f.unlink()
 
     def collect_header(self, items):
         ch = {}
@@ -278,8 +347,18 @@ class Merger:
 
             self.archive_writer.commit()
 
+    def prepare(self):
+        if 'prepare' in self.done_stages:
+            return
+
+        self.archive_writer.prepare()
+
+        self.mark_as_done('prepare')
 
     def process(self):
+        if self.force:
+            self.force_cleanup()
+
         self.populate_mosaic(self.mosaic_url)
         if 'version' in self.mosaic_data:
             self.mosaic_version = self.mosaic_data['version']
@@ -292,6 +371,9 @@ class Merger:
 
         self.archive_writer.init()
 
+        self.prepare()
+
+
         slice_data = self.mosaic_data if self.mosaic_version == 0 else self.mosaic_data.get('slices', {})
 
         for k in slice_data.keys():
@@ -303,8 +385,9 @@ class Merger:
 
             pmtiles_file = self.get_pmtiles_file(pmtiles_url)
             if not is_local(pmtiles_url):
-                if pmtiles_file.exists():
-                    raise Exception(f'local copy of {pmtiles_url} exists at {pmtiles_file}, delete existing file to continue')
+                if pmtiles_file.exists() and self.force:
+                    print(f"Force flag is active. Deleting existing local copy of {pmtiles_url} at {pmtiles_file}")
+                    pmtiles_file.unlink()
 
                 self.download_file(pmtiles_url, pmtiles_file)
             
@@ -336,6 +419,7 @@ def cli():
     parser.add_argument('--archive-type', '-a', choices=['mbtiles', 'pmtiles'], help='Type of archive to create. Required if --output-file is not provided.')
     parser.add_argument('--request-timeout-secs', '-t', type=int, default=60, help='Timeout for HTTP requests in seconds')
     parser.add_argument('--num-http-retries', '-r', type=int, default=3, help='Number of retries for HTTP requests')
+    parser.add_argument('--force', '-f', action='store_true', help='Clear all the existing leftover files and start the run from scratch.')
     args = parser.parse_args()
 
     archive_type = args.archive_type
@@ -365,17 +449,18 @@ def cli():
         out_fname = mosaic_fname[:-len('.mosaic.json')] + '.' + archive_type
         output_file = Path(out_fname)
 
-
     merger = Merger(args.mosaic_url,
                     archive_type, 
                     output_file, 
                     args.request_timeout_secs, 
-                    args.num_http_retries)
+                    args.num_http_retries,
+                    args.force)
 
     merger.process()
     merger.cleanup()
 
     print('Done!!!')
+
     
 
 if __name__ == '__main__':

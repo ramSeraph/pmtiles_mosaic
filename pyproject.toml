@@ -7,7 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "mercantile>=1.2.1",
     "pmtiles==3.4.1",
-    "requests>=2.32.4",
+    "pypdl>=1.5.6",
 ]
 authors = [
     { name = "Sreeram Kandimalla", email = "kandimalla.sreeram@gmail.com" },

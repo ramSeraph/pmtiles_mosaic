@@ -40,6 +40,12 @@ uvx --from pmtiles_mosaic download-mosaic --mosaic-url <url_or_path> --output-fi
 
 This script reads all the PMTiles partitions listed in a mosaic JSON file (remote or local) and merges them into a single, local archive file (either `.mbtiles` or `.pmtiles`). This is useful for reassembling a partitioned tileset for local use or for creating a single-file distribution.
 
+> [!NOTE]
+> The download is resumable. If it's interrupted, you can simply rerun the same command to continue from where it left off.
+
+> [!NOTE]
+> When using `download-mosaic` to download remote mosaics as `.pmtiles` files, an interruption might break some of the deduplication functionality in the pmtiles writer, leading to some deduplication not being caught. This can be avoided by running the tool with the `PYTHONHASHSEED` environment variable set to `0`.
+
 ```bash
 download-mosaic \
     --mosaic-url <url_or_path_to_mosaic.json> \
@@ -54,6 +60,7 @@ download-mosaic \
 *   `--archive-type`, `-a`: The type of archive to create (`mbtiles` or `pmtiles`). This is only required if the output file cannot be determined from the `--output-file` argument.
 *   `--request-timeout-secs`, `-t`: Timeout for HTTP requests in seconds (default: 60).
 *   `--num-http-retries`, `-r`: Number of retries for failed HTTP requests (default: 3).
+*   `--force`, `-f`: Clear all existing leftover files and start the run from scratch.
 
 ### `partition`
 
