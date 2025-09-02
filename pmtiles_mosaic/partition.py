@@ -354,14 +354,26 @@ class Partitioner:
         return self.cache_file.read(size)
 
     def collect_tiles(self):
-        print('Collecting tiles from source...')
+        caching_msg = ''
+        if self.should_cache:
+            caching_msg = ' and caching them as well'
+
+        print(f'Collecting tiles from source{caching_msg}...')
+
+        count = 0
         if self.should_cache:
             for tile, tdata in self.reader.all():
+                if count % 100000 == 0:
+                    print(f'Handled {count} tiles...')
                 self.all_tiles.append(tile)
                 self.cache_tile(tile, tdata)
+                count += 1
         else:
             for tile, tsize in self.reader.all_sizes():
+                if count % 100000 == 0:
+                    print(f'Handled {count} tiles...')
                 self.all_tiles.append(tile)
+                count += 1
 
     def complete_current_slice(self, curr_slice_writer, context, pmtiles_file_name=None):
         if pmtiles_file_name is None:
@@ -555,7 +567,7 @@ class Partitioner:
         if self.part_count <= 1:
             return
 
-        print(f'finalizing {self.part_count} partitions')
+        print(f'Finalizing {self.part_count} partitions')
         header = get_header(self.all_tiles, self.header_base, use_lower_zoom_for_bounds=False)
         header = convert_header(header, HEADER_EXPORT_KEYS)
         mosaic_data = {
