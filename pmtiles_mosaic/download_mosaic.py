@@ -74,7 +74,7 @@ class PmtilesArchiveWriter(LoggerMixin):
 
         tile_file_size = self.tile_file.stat().st_size
         if tile_file_size != self.pmtiles_writer.offset:
-            self.log_warning(f'Warning: Truncating {self.tile_file} from {tile_file_size} to {self.pmtiles_writer.offset}')
+            self.log_warning(f'Truncating {self.tile_file} from {tile_file_size} to {self.pmtiles_writer.offset}')
             self.pmtiles_writer.tile_f.seek(self.pmtiles_writer.offset)
             self.pmtiles_writer.tile_f.truncate()
 
