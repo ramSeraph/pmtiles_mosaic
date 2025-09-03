@@ -4,9 +4,11 @@ from pathlib import Path
 import mercantile
 
 from .tiles_common import MissingTileError, INTERESTED_METADATA_KEYS
+from .logger import LoggerMixin
 
-class DiskTilesSource:
-    def __init__(self, directory):
+class DiskTilesSource(LoggerMixin):
+    def __init__(self, directory, logger=None):
+        self.logger = logger
         self.dir = Path(directory)
         metadata = self.get_metadata()
         self.ext = metadata['format']

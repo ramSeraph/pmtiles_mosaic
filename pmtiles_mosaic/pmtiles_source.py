@@ -14,6 +14,7 @@ from pmtiles.tile import (
 )
 
 from .tiles_common import MissingTileError
+from .logger import LoggerMixin
 
 # pmtiles sources
 def traverse_sizes(get_bytes, header, dir_offset, dir_length):
@@ -35,8 +36,9 @@ def all_tile_sizes(get_bytes):
     header = deserialize_header(get_bytes(0, 127))
     return traverse_sizes(get_bytes, header, header["root_offset"], header["root_length"])
 
-class PMTilesSource:
-    def __init__(self, fname):
+class PMTilesSource(LoggerMixin):
+    def __init__(self, fname, logger=None):
+        self.logger = logger
         self.file = open(fname, 'rb')
         self.src = MmapSource(self.file)
         self.reader = PMTilesReader(self.src)

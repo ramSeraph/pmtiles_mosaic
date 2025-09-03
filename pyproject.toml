@@ -5,6 +5,8 @@ description = "Tools to partition and rejoin PMTiles files as mosaics"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "aiohttp>=3.12.15",
+    "colorlog>=6.9.0",
     "mercantile>=1.2.1",
     "pmtiles==3.4.1",
     "pypdl>=1.5.6",

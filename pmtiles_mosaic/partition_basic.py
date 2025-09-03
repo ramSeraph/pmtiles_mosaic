@@ -19,6 +19,7 @@ from pmtiles.tile import zxy_to_tileid, TileType, Compression
 from pmtiles.writer import Writer as PMTilesWriter
 
 from .tile_sources import create_source_from_paths
+from .logger import LoggerMixin, get_logger
 
 BASE_SIZE_FOR_DELTA = 2 * 1024 * 1024 * 1024 # 2GB
 BASE_DELTA = 5 * 1024 * 1024 # 5MB
@@ -76,11 +77,11 @@ def parse_size(size_str):
 
     return intended_size
 
-def adjust_size_limit(intended_size, delta_estimate=None):
+def adjust_size_limit(intended_size, logger, delta_estimate=None):
     if delta_estimate is None:
         delta_estimate = int(BASE_DELTA * (intended_size / BASE_SIZE_FOR_DELTA))
 
-    print(f'Using delta estimate: {delta_estimate} bytes for intended size: {intended_size} bytes')
+    logger.info(f'Using delta estimate: {delta_estimate} bytes for intended size: {intended_size} bytes')
 
     final_size = intended_size - delta_estimate
     if final_size < 0:
@@ -107,9 +108,10 @@ def get_pmtiles_file_name(to_pmtiles_prefix, suffix):
 
     return out_pmtiles_file
 
-class Partitioner:
-    def __init__(self, reader, to_pmtiles_prefix, size_limit_bytes):
+class Partitioner(LoggerMixin):
+    def __init__(self, reader, to_pmtiles_prefix, size_limit_bytes, logger=None):
         self.reader = reader
+        self.logger = logger
 
         self.max_zoom_level = reader.max_zoom
         self.min_zoom_level = reader.min_zoom
@@ -145,7 +147,7 @@ class Partitioner:
 
     def create_top_slice(self):
     
-        print('getting top slice')
+        self.log_info('Getting top slice')
 
         size_till_now = 0
 
@@ -252,17 +254,17 @@ class Partitioner:
 
         top_slice_max_level = self.create_top_slice()
 
-        print(f'top slice max zoom level: {top_slice_max_level}')
+        self.log_info(f'Top slice max zoom level: {top_slice_max_level}')
 
         if top_slice_max_level == self.max_zoom_level:
-            print('no more slicing required')
+            self.log_info('No more slicing required')
             return
 
         from_level = top_slice_max_level + 1
 
-        print('getting x stripes from zoom level', from_level)
+        self.log_info(f'Getting x stripes from zoom level {from_level}')
         x_stripe_sizes, x_stripe_tiles = self.get_x_stripes(from_level)
-        print('getting buckets')
+        self.log_info('Getting buckets')
         buckets, bucket_tiles, expected_bucket_sizes = self.get_buckets(x_stripe_sizes, x_stripe_tiles)
     
         for i,bucket in enumerate(buckets):
@@ -386,13 +388,13 @@ class Partitioner:
     
     def write_mosaic_file(self, mosaic_data):
         if len(self.slices) <= 1:
-            print('No slices to write mosaic file')
+            self.log_info('No slices to write mosaic file')
             return
 
         out_mosaic_file = f'{self.to_pmtiles_prefix}.mosaic.json'
         with open(out_mosaic_file, 'w') as f:
             json.dump(mosaic_data, f)
-        print(f'Wrote mosaic file to {out_mosaic_file}')
+        self.log_info(f'Wrote mosaic file to {out_mosaic_file}')
 
     def write_partitions(self):
 
@@ -450,14 +452,14 @@ class Partitioner:
 
         for i, slice in enumerate(self.slices):
             out_pmtiles_file = out_pmtiles_files[i]
-            print(f'writing partition {slice} to {out_pmtiles_file}')
+            self.log_info(f'Writing partition {slice} to {out_pmtiles_file}')
             writer = writers[i]
             header = headers[i]
             metadata = metadatas[i]
             writer.finalize(header, metadata)
             file_size = Path(out_pmtiles_file).stat().st_size
             delta = file_size - self.expected_slice_sizes[i]
-            print(f'partition {slice} written to {out_pmtiles_file} with size {file_size} bytes, expected size was {self.expected_slice_sizes[i]} bytes, delta: {delta} bytes')
+            self.log_info(f'Partition {slice} written to {out_pmtiles_file} with size {file_size} bytes, expected size was {self.expected_slice_sizes[i]} bytes, delta: {delta} bytes')
 
         mosaic_data = {
             'version': 1,
@@ -486,19 +488,22 @@ def partition_main(args):
     parser.add_argument('--to-pmtiles', required=True, help='Output PMTiles file.')
     parser.add_argument('--size-limit', default='github_release', type=parse_size, help='Maximum size of each partition. Can be a number in bytes or a preset: github_release (2G), github_file (100M), cloudflare_object (512M). Can also be a number with optional units (K, M, G). Default is github_release (2G).')
     parser.add_argument('--delta-estimate', required=False, type=int, help='Estimated delta above tile data. This is used to calculate the final size of each partition. if not provided it will be calculated based on the size limit.. approximately 5MB for 2GB size limit.')
+    parser.add_argument('--log-level', '-l', type=str, default='INFO', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'], help='Set the logging level.')
     args = parser.parse_args(args)
+
+    logger = get_logger("partition-basic", args.log_level)
 
     if not args.to_pmtiles.endswith('.pmtiles'):
         parser.error("Output PMTiles file must end with '.pmtiles'")
     to_pmtiles_prefix = args.to_pmtiles.removesuffix('.pmtiles')
 
-    reader = create_source_from_paths(args.from_source)
+    reader = create_source_from_paths(args.from_source, logger=logger)
 
     size_limit_bytes = args.size_limit
-    adjusted_size_limit = adjust_size_limit(size_limit_bytes, args.delta_estimate)
-    print(f'Partitioning with size limit: {adjusted_size_limit} bytes')
+    adjusted_size_limit = adjust_size_limit(size_limit_bytes, logger, args.delta_estimate)
+    logger.info(f'Partitioning with size limit: {adjusted_size_limit} bytes')
 
-    partitioner = Partitioner(reader, to_pmtiles_prefix, args.size_limit)
+    partitioner = Partitioner(reader, to_pmtiles_prefix, args.size_limit, logger=logger)
 
     partitioner.partition()
 
@@ -509,5 +514,3 @@ def cli():
 
 if __name__ == '__main__':
     cli()
-
-

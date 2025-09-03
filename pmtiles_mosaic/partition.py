@@ -21,6 +21,7 @@ from pmtiles.tile import zxy_to_tileid, TileType, Compression
 from pmtiles.writer import Writer as PMTilesWriter
 
 from .tile_sources import create_source_from_paths
+from .logger import LoggerMixin, get_logger
 
 SLICE_HEADER_EXPORT_KEYS = [
     'min_lon_e7',
@@ -303,9 +304,10 @@ class CheckpointablePMTilesWriter:
             del self.last_checkpoint
 
 
-class Partitioner:
-    def __init__(self, reader, to_pmtiles_prefix, size_limit_bytes, should_cache):
+class Partitioner(LoggerMixin):
+    def __init__(self, reader, to_pmtiles_prefix, size_limit_bytes, should_cache, logger=None):
         self.reader = reader
+        self.logger = logger
 
         self.max_zoom_level = reader.max_zoom
         self.min_zoom_level = reader.min_zoom
@@ -358,20 +360,20 @@ class Partitioner:
         if self.should_cache:
             caching_msg = ' and caching them as well'
 
-        print(f'Collecting tiles from source{caching_msg}...')
+        self.log_info(f'Collecting tiles from source{caching_msg}...')
 
         count = 0
         if self.should_cache:
             for tile, tdata in self.reader.all():
                 if count % 100000 == 0:
-                    print(f'Handled {count} tiles...')
+                    self.log_info(f'Handled {count} tiles...')
                 self.all_tiles.append(tile)
                 self.cache_tile(tile, tdata)
                 count += 1
         else:
             for tile, tsize in self.reader.all_sizes():
                 if count % 100000 == 0:
-                    print(f'Handled {count} tiles...')
+                    self.log_info(f'Handled {count} tiles...')
                 self.all_tiles.append(tile)
                 count += 1
 
@@ -379,7 +381,7 @@ class Partitioner:
         if pmtiles_file_name is None:
             pmtiles_file_name = self.get_current_partition_filename()
 
-        print(f'Finalizing partition {pmtiles_file_name} with {len(curr_slice_writer.tiles)} tiles, context: {context}')
+        self.log_info(f'Finalizing partition {pmtiles_file_name} with {len(curr_slice_writer.tiles)} tiles, context: {context}')
         header = curr_slice_writer.finalize(pmtiles_file_name)
         curr_slice_writer.close()
         self.headers.append(header)
@@ -390,7 +392,7 @@ class Partitioner:
         return CheckpointablePMTilesWriter(self.header_base, self.src_metadata)
 
     def partition_by_y(self, from_zoom_level, to_zoom_level, x_tiles, context):
-        print(f'Partitioning by y for context: {context}')
+        self.log_info(f'Partitioning by y for context: {context}')
 
         tiles_by_y = {}
         for t in x_tiles:
@@ -445,7 +447,7 @@ class Partitioner:
             self.complete_current_slice(curr_slice_writer, new_context)
 
     def partition_by_x(self, from_zoom_level, to_zoom_level, tiles_by_z, context):
-        print(f'Partitioning by x for context: {context}')
+        self.log_info(f'Partitioning by x for context: {context}')
 
         tiles_by_x = {}
         for zoom_level in range(from_zoom_level, to_zoom_level + 1):
@@ -502,7 +504,7 @@ class Partitioner:
 
     def partition_by_z(self, from_zoom_level, to_zoom_level, tiles, context):
 
-        print(f'Partitioning by z for context: {context}')
+        self.log_info(f'Partitioning by z for context: {context}')
 
         tiles_by_z = {}
         for tile in tiles:
@@ -561,13 +563,13 @@ class Partitioner:
         out_mosaic_file = f'{self.to_pmtiles_prefix}.mosaic.json'
         with open(out_mosaic_file, 'w') as f:
             json.dump(mosaic_data, f)
-        print(f'Wrote mosaic file to {out_mosaic_file}')
+        self.log_info(f'Wrote mosaic file to {out_mosaic_file}')
 
     def finalize(self):
         if self.part_count <= 1:
             return
 
-        print(f'Finalizing {self.part_count} partitions')
+        self.log_info(f'Finalizing {self.part_count} partitions')
         header = get_header(self.all_tiles, self.header_base, use_lower_zoom_for_bounds=False)
         header = convert_header(header, HEADER_EXPORT_KEYS)
         mosaic_data = {
@@ -592,17 +594,20 @@ def partition_main(args):
     parser.add_argument('--to-pmtiles', required=True, help='Output PMTiles file.')
     parser.add_argument('--size-limit', default='github_release', type=parse_size, help='Maximum size of each partition. Can be a number in bytes or a preset: github_release (2G), github_file (100M), cloudflare_object (512M). Can also be a number with optional units (K, M, G). Default is github_release (2G).')
     parser.add_argument('--no-cache', action='store_true', default=False, help='Cache tiles locally for speed')
+    parser.add_argument('--log-level', '-l', type=str, default='INFO', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'], help='Set the logging level.')
     args = parser.parse_args(args)
+
+    logger = get_logger("partition", args.log_level)
 
     if not args.to_pmtiles.endswith('.pmtiles'):
         parser.error("Output PMTiles file must end with '.pmtiles'")
     to_pmtiles_prefix = args.to_pmtiles.removesuffix('.pmtiles')
 
-    reader = create_source_from_paths(args.from_source)
+    reader = create_source_from_paths(args.from_source, logger=logger)
 
-    print(f'size limit: {args.size_limit} bytes')
+    logger.info(f'Size limit: {args.size_limit} bytes')
 
-    partitioner = Partitioner(reader, to_pmtiles_prefix, args.size_limit, not args.no_cache)
+    partitioner = Partitioner(reader, to_pmtiles_prefix, args.size_limit, not args.no_cache, logger=logger)
 
     partitioner.partition()
 
@@ -613,5 +618,3 @@ def cli():
 
 if __name__ == '__main__':
     cli()
-
-

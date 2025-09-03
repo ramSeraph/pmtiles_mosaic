@@ -61,6 +61,7 @@ download-mosaic \
 *   `--request-timeout-secs`, `-t`: Timeout for HTTP requests in seconds (default: 60).
 *   `--num-http-retries`, `-r`: Number of retries for failed HTTP requests (default: 3).
 *   `--force`, `-f`: Clear all existing leftover files and start the run from scratch.
+*   `--log-level`, `-l`: Set the logging level. Can be one of `DEBUG`, `INFO`, `WARNING`, `ERROR` (default: `INFO`).
 
 ### `partition`
 
@@ -86,6 +87,7 @@ partition \
     *   Can be a number in bytes, or with a `K`, `M`, or `G` suffix (e.g., `500M`).
     *   Defaults to `github_release`.
 *   `--no-cache`: By default, the tool caches tile data in a temporary file to speed up processing. Use this flag to disable caching.
+*   `--log-level`, `-l`: Set the logging level. Can be one of `DEBUG`, `INFO`, `WARNING`, `ERROR` (default: `INFO`).
 
 #### Merging Multiple Sources
 
@@ -113,7 +115,7 @@ partition-basic \
 
 **Arguments:**
 
-Most arguments are the same as for the `partition` script, with one addition:
+Most arguments are the same as for the `partition` script (including `--log-level`), with one addition:
 
 *   `--delta-estimate`: An integer representing the estimated overhead (in bytes) for the PMTiles header, directory, and other metadata. This amount is subtracted from the `--size-limit` to get the target size for the raw tile data. If not provided, it is calculated automatically based on the size limit (e.g., for a 2GB size limit, the delta is ~5MB).
 

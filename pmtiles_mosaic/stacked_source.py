@@ -1,8 +1,10 @@
 from .tiles_common import MissingTileError, INTERESTED_METADATA_KEYS
+from .logger import LoggerMixin
  
 # hybrid source that combines multiple tile sources in order
-class StackedTileSource:
-    def __init__(self, srcs):
+class StackedTileSource(LoggerMixin):
+    def __init__(self, srcs, logger=None):
+        self.logger = logger
         self.srcs = srcs
 
     def get_tile_data(self, tile):
@@ -24,7 +26,7 @@ class StackedTileSource:
     def all_z_sizes(self, z):
         seen = set()
         for i, src in enumerate(self.srcs):
-            #print(f'iterating over source {i} for {z}')
+            self.log_debug(f'Iterating over source {i} for {z}')
             for (tile, size) in src.all_z_sizes(z):
                 if tile in seen:
                     continue
@@ -34,7 +36,7 @@ class StackedTileSource:
     def all(self):
         seen = set()
         for i, src in enumerate(self.srcs):
-            #print(f'iterating over source {i} for all levels')
+            self.log_debug(f'Iterating over source {i} for all levels')
             for (tile, data) in src.all():
                 if tile in seen:
                     continue
@@ -44,7 +46,7 @@ class StackedTileSource:
     def all_sizes(self):
         seen = set()
         for i, src in enumerate(self.srcs):
-            #print(f'iterating over source {i} for all levels')
+            self.log_debug(f'Iterating over source {i} for all levels')
             for (tile, size) in src.all_sizes():
                 if tile in seen:
                     continue

@@ -6,45 +6,51 @@
 #     "pmtiles",
 #     "requests",
 #     "pypdl",
+#     "colorlog",
+#     "aiohttp",
 # ]
 # ///
 
-import os
 import json
 import pickle
 import sqlite3
+import logging
 
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlparse, urljoin, unquote
 
 import pypdl
+import aiohttp
 
 from pmtiles.reader import Reader, MmapSource, all_tiles
 from pmtiles.writer import Writer
 from pmtiles.tile import zxy_to_tileid, Compression, TileType
 
+from .logger import LoggerMixin, get_logger
+
 # heavily copied from https://github.com/protomaps/PMTiles/blob/main/python/pmtiles/convert.py
 # and https://github.com/mapbox/mbutil/blob/master/mbutil/util.py
 
-class PmtilesArchiveWriter:
-    def __init__(self, output_file, force=False):
+class PmtilesArchiveWriter(LoggerMixin):
+    def __init__(self, output_file, force=False, logger=None):
         self.pmtiles_writer = None
         self.output_file = output_file
         self.tile_file = None
         self.meta_file = None
         self.force = force
+        self.logger = logger
 
     def init(self):
         tile_file = self.output_file.with_suffix('.tiles.bin')
         meta_file = self.output_file.with_suffix('.meta.pkl')
 
         if self.force:
-            print("Force flag is active. Cleaning up pmtiles writer leftover files.")
+            self.log_info("Force flag is active. Cleaning up pmtiles writer leftover files.")
             if tile_file.exists():
-                print(f"Deleting {tile_file}")
+                self.log_info(f"Deleting {tile_file}")
                 tile_file.unlink()
             if meta_file.exists():
-                print(f"Deleting {meta_file}")
+                self.log_info(f"Deleting {meta_file}")
                 meta_file.unlink()
 
         self.pmtiles_writer = Writer(open(self.output_file, 'wb'))
@@ -58,7 +64,7 @@ class PmtilesArchiveWriter:
             self.dump_meta()
             return
 
-        print(f'Resuming from existing tile file {tile_file} and meta file {meta_file}')
+        self.log_info(f'Resuming from existing tile file {tile_file} and meta file {meta_file}')
         meta = pickle.loads(meta_file.read_bytes())
         self.pmtiles_writer.tile_entries = meta['tile_entries']
         self.pmtiles_writer.hash_to_offset = meta['hash_to_offset']
@@ -68,7 +74,7 @@ class PmtilesArchiveWriter:
 
         tile_file_size = self.tile_file.stat().st_size
         if tile_file_size != self.pmtiles_writer.offset:
-            print(f'Warning: Truncating {self.tile_file} from {tile_file_size} to {self.pmtiles_writer.offset}')
+            self.log_warning(f'Warning: Truncating {self.tile_file} from {tile_file_size} to {self.pmtiles_writer.offset}')
             self.pmtiles_writer.tile_f.seek(self.pmtiles_writer.offset)
             self.pmtiles_writer.tile_f.truncate()
 
@@ -106,12 +112,13 @@ class PmtilesArchiveWriter:
         self.meta_file.unlink()
 
 
-class MbtilesArchiveWriter:
-    def __init__(self, output_file, force=False):
+class MbtilesArchiveWriter(LoggerMixin):
+    def __init__(self, output_file, force=False, logger=None):
         self.conn = None
         self.cursor = None
         self.output_file = output_file
         self.force = force
+        self.logger = logger
 
     def init(self):
         self.conn = sqlite3.connect(self.output_file)
@@ -197,11 +204,16 @@ def is_local(url):
     return url_parsed.scheme in ('', 'file')
  
 
-class Merger:
-    def __init__(self, mosaic_url, archive_type, output_file, request_timeout_secs, num_http_retries, force=False):
+class Merger(LoggerMixin):
+    def __init__(self, mosaic_url, archive_type, output_file, request_timeout_secs, num_http_retries, force=False, logger=None):
         self.request_timeout_secs = request_timeout_secs
         self.num_http_retries = num_http_retries
         self.force = force
+        self.logger = logger
+
+        self.silent_pypdl_logger = logging.getLogger('pypdl_silent')
+        self.silent_pypdl_logger.addHandler(logging.NullHandler())
+        self.silent_pypdl_logger.propagate = False
 
         self.output_file = output_file
         self.output_dir = output_file.parent
@@ -214,6 +226,7 @@ class Merger:
         self.mosaic_data = None
         self.mosaic_version = 0
         self.done_stages = set()
+
 
     def get_file_from_url(self, url):
         if is_local(url):
@@ -231,10 +244,10 @@ class Merger:
 
     def get_archive_writer(self):
         if self.archive_type == 'mbtiles':
-            return MbtilesArchiveWriter(self.output_file, force=self.force)
+            return MbtilesArchiveWriter(self.output_file, force=self.force, logger=self.logger)
 
         if self.archive_type == 'pmtiles':
-            return PmtilesArchiveWriter(self.output_file, force=self.force)
+            return PmtilesArchiveWriter(self.output_file, force=self.force, logger=self.logger)
 
         raise ValueError(f'Unsupported archive type: {self.archive_type}')
 
@@ -249,13 +262,16 @@ class Merger:
 
 
     def download_file(self, url, file):
-        print(f'downloading {url} to {file}')
-        dl = pypdl.Pypdl()
-        dl.start(url=url, 
-                 file_path=str(file),
-                 multisegment=False,
-                 retries=self.num_http_retries, 
-                 timeout=self.request_timeout_secs) 
+        self.log_info(f'downloading {url} to {file}')
+        downloader = pypdl.Pypdl(logger=self.silent_pypdl_logger)
+        timeout = aiohttp.ClientTimeout(
+            connect=self.request_timeout_secs,
+            sock_read=self.request_timeout_secs
+        )
+        downloader.start(url=url, 
+                        file_path=str(file),
+                        retries=self.num_http_retries, 
+                        timeout=timeout)
 
     def init_tracker(self):
         if not self.tracker_file.exists():
@@ -282,21 +298,37 @@ class Merger:
 
         return urljoin(self.mosaic_url, k)
 
+    def _cleanup_pypdl_leftovers(self, file_path):
+        """Cleans up pypdl leftover files for a given file path."""
+        json_file = Path(str(file_path) + '.json')
+        if json_file.exists():
+            self.log_info(f"Deleting pypdl leftover file: {json_file}")
+            json_file.unlink()
+
+        glob_pattern = f"{file_path.name}.*"
+        for f in file_path.parent.glob(glob_pattern):
+            maybe_segment = f.name[len(file_path.name)+1:]
+            if maybe_segment.isdigit():
+                self.log_info(f"Deleting pypdl leftover file: {f}")
+                f.unlink()
+
     def force_cleanup(self):
-        print("Force flag is active. Cleaning up leftover files.")
-        files_to_delete = [
-            self.output_file,
-            self.tracker_file,
-        ]
+        self.log_info("Force flag is active. Cleaning up leftover files.")
+        
+        if self.output_file.exists():
+            self.log_info(f"Deleting {self.output_file}")
+            self.output_file.unlink()
+
+        if self.tracker_file.exists():
+            self.log_info(f"Deleting {self.tracker_file}")
+            self.tracker_file.unlink()
 
         mosaic_file = self.get_mosaic_file()
         if not is_local(self.mosaic_url):
-            files_to_delete.append(mosaic_file)
-
-        for f in files_to_delete:
-            if f.exists():
-                print(f"Deleting {f}")
-                f.unlink()
+            if mosaic_file.exists():
+                self.log_info(f"Deleting {mosaic_file}")
+                mosaic_file.unlink()
+            self._cleanup_pypdl_leftovers(mosaic_file)
 
     def collect_header(self, items):
         ch = {}
@@ -337,7 +369,7 @@ class Merger:
 
     def add_pmtiles(self, pmtiles_fname):
 
-        print(f'adding {pmtiles_fname} to archive')
+        self.log_info(f'adding {pmtiles_fname} to archive')
         with open(pmtiles_fname, "r+b") as f:
             source = MmapSource(f)
             reader = Reader(source)
@@ -380,14 +412,16 @@ class Merger:
 
             pmtiles_url = self.get_pmtiles_url(k)
             if k in self.done_stages:
-                print(f'Stage {k} already done, skipping')
+                self.log_info(f'Stage {k} already done, skipping')
                 continue
 
             pmtiles_file = self.get_pmtiles_file(pmtiles_url)
             if not is_local(pmtiles_url):
-                if pmtiles_file.exists() and self.force:
-                    print(f"Force flag is active. Deleting existing local copy of {pmtiles_url} at {pmtiles_file}")
-                    pmtiles_file.unlink()
+                if self.force:
+                    if pmtiles_file.exists():
+                        self.log_info(f"Force flag is active. Deleting existing local copy of {pmtiles_url} at {pmtiles_file}")
+                        pmtiles_file.unlink()
+                    self._cleanup_pypdl_leftovers(pmtiles_file)
 
                 self.download_file(pmtiles_url, pmtiles_file)
             
@@ -404,12 +438,12 @@ class Merger:
     def cleanup(self):
         if self.tracker_file.exists():
             self.tracker_file.unlink()
-            print('Tracker file deleted.')
+            self.log_debug('Tracker file deleted.')
 
         mosaic_file = self.get_mosaic_file()
         if not is_local(self.mosaic_url) and mosaic_file.exists():
             mosaic_file.unlink()
-            print('Mosaic file deleted.')
+            self.log_debug('Mosaic file deleted.')
 
 def cli():
     import argparse
@@ -420,7 +454,10 @@ def cli():
     parser.add_argument('--request-timeout-secs', '-t', type=int, default=60, help='Timeout for HTTP requests in seconds')
     parser.add_argument('--num-http-retries', '-r', type=int, default=3, help='Number of retries for HTTP requests')
     parser.add_argument('--force', '-f', action='store_true', help='Clear all the existing leftover files and start the run from scratch.')
+    parser.add_argument('--log-level', '-l', type=str, default='INFO', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'], help='Set the logging level.')
     args = parser.parse_args()
+
+    logger = get_logger(__name__, args.log_level)
 
     archive_type = args.archive_type
     output_file = None
@@ -454,15 +491,15 @@ def cli():
                     output_file, 
                     args.request_timeout_secs, 
                     args.num_http_retries,
-                    args.force)
+                    force=args.force,
+                    logger=logger)
 
     merger.process()
     merger.cleanup()
 
-    print('Done!!!')
+    logger.info('Done!!!')
 
     
 
 if __name__ == '__main__':
     cli()
-

@@ -4,9 +4,11 @@ import json
 import mercantile
 
 from .tiles_common import MissingTileError, INTERESTED_METADATA_KEYS
+from .logger import LoggerMixin
 
-class MBTilesSource:
-    def __init__(self, fname):
+class MBTilesSource(LoggerMixin):
+    def __init__(self, fname, logger=None):
+        self.logger = logger
         self.con = sqlite3.connect(fname)
         self._full_metadata = None
 
