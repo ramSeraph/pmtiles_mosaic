@@ -8,6 +8,7 @@ dependencies = [
     "aiohttp>=3.12.15",
     "colorlog>=6.9.0",
     "mercantile>=1.2.1",
+    "pillow>=11.3.0",
     "pmtiles==3.4.1",
     "pypdl>=1.5.6",
 ]

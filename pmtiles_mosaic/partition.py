@@ -3,6 +3,7 @@
 # dependencies = [
 #     "mercantile",
 #     "pmtiles",
+#     "pillow",
 # ]
 # ///
 
@@ -16,12 +17,16 @@ import argparse
 
 from pathlib import Path
 
+import io
+
 import mercantile
+from PIL import Image
 from pmtiles.tile import zxy_to_tileid, TileType, Compression
 from pmtiles.writer import Writer as PMTilesWriter
 
 from .tile_sources import create_source_from_paths
 from .logger import LoggerMixin, get_logger
+
 
 SLICE_HEADER_EXPORT_KEYS = [
     'min_lon_e7',
@@ -229,22 +234,61 @@ class WriterCheckpoint:
         self.tiles = copy.copy(tiles)
 
 
-class CheckpointablePMTilesWriter:
-    def __init__(self, header_base, metadata):
+class CheckpointablePMTilesWriter(LoggerMixin):
+    def __init__(self, header_base, metadata, logger=None, exclude_transparent=False):
         self.header_base = header_base
         self.should_be_compressed = (header_base.get('tile_compression', Compression.NONE) == Compression.GZIP)
         self.metadata = metadata
+        self.logger = logger
+        self.exclude_transparent = exclude_transparent
+        self.tile_type = header_base.get('tile_type')
 
         self.header_f = tempfile.TemporaryFile()
         self.writer = PMTilesWriter(self.header_f)
         self.tiles = []
         self.last_checkpoint = None
 
+
+    def is_transparent_empty(self, tdata, tile_type):
+
+        img_format = 'PNG' if tile_type == TileType.PNG else 'WEBP'
+
+        try:
+            with Image.open(io.BytesIO(tdata), formats=[img_format]) as im:
+                # Check for transparency
+                if im.mode in ('RGBA', 'LA') or (im.mode == 'P' and 'transparency' in im.info):
+                    # Get alpha channel
+                    if im.mode != 'A':
+                        alpha = im.getchannel('A')
+                    else:
+                        alpha = im
+                    min_alpha, max_alpha = alpha.getextrema()
+                    return max_alpha == 0
+        except Exception:
+            self.log_warning("Error checking transparency", exc_info=True)
+
+        return False
+
+
+
     def write_tile(self, tile, tdata):
+
+        is_compressed = (tdata[0:2] == b"\x1f\x8b")
+
+        if self.exclude_transparent and self.tile_type in [TileType.PNG, TileType.WEBP]:
+            if is_compressed:
+                # decompress first
+                tdata_uncompressed = gzip.decompress(tdata)
+                if self.is_transparent_empty(tdata_uncompressed, self.tile_type):
+                    return
+            else:
+                if self.is_transparent_empty(tdata, self.tile_type):
+                    return
+
         self.tiles.append(tile)
         tile_id = zxy_to_tileid(tile.z, tile.x, tile.y)
 
-        if self.should_be_compressed and tdata[0:2] != b"\x1f\x8b":
+        if self.should_be_compressed and not is_compressed:
             tdata = gzip.compress(tdata)
 
         self.writer.write_tile(tile_id, tdata)
@@ -305,9 +349,10 @@ class CheckpointablePMTilesWriter:
 
 
 class Partitioner(LoggerMixin):
-    def __init__(self, reader, to_pmtiles_prefix, size_limit_bytes, should_cache, logger=None):
+    def __init__(self, reader, to_pmtiles_prefix, size_limit_bytes, should_cache, logger=None, exclude_transparent=False):
         self.reader = reader
         self.logger = logger
+        self.exclude_transparent = exclude_transparent
 
         self.max_zoom_level = reader.max_zoom
         self.min_zoom_level = reader.min_zoom
@@ -389,7 +434,9 @@ class Partitioner(LoggerMixin):
         self.part_count += 1
  
     def create_new_writer(self):
-        return CheckpointablePMTilesWriter(self.header_base, self.src_metadata)
+        return CheckpointablePMTilesWriter(self.header_base, self.src_metadata,
+                                           logger=self.logger,
+                                           exclude_transparent=self.exclude_transparent)
 
     def partition_by_y(self, from_zoom_level, to_zoom_level, x_tiles, context):
         self.log_info(f'Partitioning by y for context: {context}')
@@ -594,6 +641,7 @@ def partition_main(args):
     parser.add_argument('--to-pmtiles', required=True, help='Output PMTiles file.')
     parser.add_argument('--size-limit', default='github_release', type=parse_size, help='Maximum size of each partition. Can be a number in bytes or a preset: github_release (2G), github_file (100M), cloudflare_object (512M). Can also be a number with optional units (K, M, G). Default is github_release (2G).')
     parser.add_argument('--no-cache', action='store_true', default=False, help='Cache tiles locally for speed')
+    parser.add_argument('--exclude-transparent', action='store_true', default=False, help='Exclude transparent empty tiles from raster sources (PNG, WEBP).')
     parser.add_argument('--log-level', '-l', type=str, default='INFO', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'], help='Set the logging level.')
     args = parser.parse_args(args)
 
@@ -607,7 +655,7 @@ def partition_main(args):
 
     logger.info(f'Size limit: {args.size_limit} bytes')
 
-    partitioner = Partitioner(reader, to_pmtiles_prefix, args.size_limit, not args.no_cache, logger=logger)
+    partitioner = Partitioner(reader, to_pmtiles_prefix, args.size_limit, not args.no_cache, logger=logger, exclude_transparent=args.exclude_transparent)
 
     partitioner.partition()
 
