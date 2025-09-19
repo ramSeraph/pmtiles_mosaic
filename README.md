@@ -78,6 +78,9 @@ partition \
     --size-limit <limit>
 ```
 
+> [!NOTE]
+> If the entire source is smaller than the `size-limit`, a single PMTiles file will be created (e.g., `my-map.pmtiles`) and no `.mosaic.json` file will be generated.
+
 **Arguments:**
 
 *   `--from-source`: Path to a source file or directory. Can be a `.mbtiles` file, a directory containing tiles in `Z/X/Y.ext` format, or a `.pmtiles` file. When specifying `.pmtiles` files, you can use a glob pattern (e.g., `"partitions/*.pmtiles"`) to include multiple files. This argument can be repeated to merge multiple sources.
@@ -87,6 +90,7 @@ partition \
     *   Can be a number in bytes, or with a `K`, `M`, or `G` suffix (e.g., `500M`).
     *   Defaults to `github_release`.
 *   `--no-cache`: By default, the tool caches tile data in a temporary file to speed up processing. Use this flag to disable caching.
+*   `--exclude-transparent`: For raster tilesets (PNG or WEBP), this option will skip any tiles that are completely transparent and empty. This can help reduce the size of the partitions by excluding unnecessary data( though this was originally written for the topo_map_processor retile usecase ).
 *   `--log-level`, `-l`: Set the logging level. Can be one of `DEBUG`, `INFO`, `WARNING`, `ERROR` (default: `INFO`).
 
 #### Merging Multiple Sources
