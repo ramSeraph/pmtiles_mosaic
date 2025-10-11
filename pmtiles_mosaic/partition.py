@@ -232,6 +232,7 @@ class WriterCheckpoint:
         self.addressed_tiles = writer.addressed_tiles
         self.clustered = writer.clustered
         self.tiles = copy.copy(tiles)
+        self.size = 0
 
 
 class CheckpointablePMTilesWriter(LoggerMixin):
@@ -247,6 +248,8 @@ class CheckpointablePMTilesWriter(LoggerMixin):
         self.writer = PMTilesWriter(self.header_f)
         self.tiles = []
         self.last_checkpoint = None
+        self._cached_size = 0
+        self._is_size_cached = True
 
 
     def is_transparent_empty(self, tdata, tile_type):
@@ -272,7 +275,7 @@ class CheckpointablePMTilesWriter(LoggerMixin):
 
 
     def write_tile(self, tile, tdata):
-
+        self._is_size_cached = False
         is_compressed = (tdata[0:2] == b"\x1f\x8b")
 
         if self.exclude_transparent and self.tile_type in [TileType.PNG, TileType.WEBP]:
@@ -294,7 +297,13 @@ class CheckpointablePMTilesWriter(LoggerMixin):
         self.writer.write_tile(tile_id, tdata)
 
     def checkpoint(self):
+        if not self._is_size_cached:
+            self._cached_size = self._calculate_size()
+            self._is_size_cached = True
+
         self.last_checkpoint = WriterCheckpoint(self.writer, self.tiles)
+        self.last_checkpoint.size = self._cached_size
+
 
     def rollback(self):
         if self.last_checkpoint is None:
@@ -311,6 +320,9 @@ class CheckpointablePMTilesWriter(LoggerMixin):
         self.writer.tile_f.seek(self.writer.offset)
         self.writer.tile_f.truncate(self.writer.offset)
 
+        self._cached_size = self.last_checkpoint.size
+        self._is_size_cached = True
+
 
     def is_empty(self):
         return len(self.tiles) == 0
@@ -324,6 +336,18 @@ class CheckpointablePMTilesWriter(LoggerMixin):
         return header_for_mosaic
 
     def get_size(self):
+        # TODO: is this required?
+        if self.last_checkpoint and len(self.tiles) == len(self.last_checkpoint.tiles):
+            return self.last_checkpoint.size
+
+        if self._is_size_cached:
+            return self._cached_size
+
+        self._cached_size = self._calculate_size()
+        self._is_size_cached = True
+        return self._cached_size
+
+    def _calculate_size(self):
         header = get_header(self.tiles, self.header_base, use_lower_zoom_for_bounds=True)
 
         prev_tile_f = self.writer.tile_f
