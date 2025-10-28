@@ -348,6 +348,10 @@ class CheckpointablePMTilesWriter(LoggerMixin):
         return self._cached_size
 
     def _calculate_size(self):
+        # Estiamating header size will fail if there are no tiles, shortcircuiting here
+        if len(self.tiles) == 0:
+            return 0
+
         header = get_header(self.tiles, self.header_base, use_lower_zoom_for_bounds=True)
 
         prev_tile_f = self.writer.tile_f
