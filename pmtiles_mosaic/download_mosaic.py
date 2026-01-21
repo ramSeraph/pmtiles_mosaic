@@ -224,7 +224,7 @@ class Merger(LoggerMixin):
 
         self.mosaic_url = mosaic_url
         self.mosaic_data = None
-        self.mosaic_version = 0
+        self.mosaic_version = None
         self.done_stages = set()
 
 
@@ -290,9 +290,6 @@ class Merger(LoggerMixin):
         self.done_stages.add(stage)
 
     def get_pmtiles_url(self, k):
-        if self.mosaic_version == 0 and k.startswith('../'):
-            k = k[3:]
-
         if is_local(self.mosaic_url):
             return str(Path(self.mosaic_url).parent / k)
 
@@ -330,41 +327,9 @@ class Merger(LoggerMixin):
                 mosaic_file.unlink()
             self._cleanup_pypdl_leftovers(mosaic_file)
 
-    def collect_header(self, items):
-        ch = {}
-        for item in items:
-            h = item['header']
-            if 'max_zoom' not in ch or ch['max_zoom'] < h['max_zoom']:
-                ch['max_zoom'] = h['max_zoom']
-            if 'min_zoom' not in ch or ch['min_zoom'] > h['min_zoom']:
-                ch['min_zoom'] = h['min_zoom']
-    
-            if 'max_lat_e7' not in ch or ch['max_lat_e7'] < h['max_lat_e7']:
-                ch['max_lat_e7'] = h['max_lat_e7']
-            if 'min_lat_e7' not in ch or ch['min_lat_e7'] > h['min_lat_e7']:
-                ch['min_lat_e7'] = h['min_lat_e7']
-            if 'max_lon_e7' not in ch or ch['max_lon_e7'] < h['max_lon_e7']:
-                ch['max_lon_e7'] = h['max_lon_e7']
-            if 'min_lon_e7' not in ch or ch['min_lon_e7'] > h['min_lon_e7']:
-                ch['min_lon_e7'] = h['min_lon_e7']
-    
-            ch['tile_compression'] = h['tile_compression']
-            ch['tile_type'] = h['tile_type']
-    
-        ch['center_lat_e7'] = (ch['max_lat_e7'] + ch['min_lat_e7']) // 2
-        ch['center_lon_e7'] = (ch['max_lon_e7'] + ch['min_lon_e7']) // 2
-        ch['center_zoom'] = (ch['max_zoom'] + ch['min_zoom']) // 2
-    
-        return ch
-
     def get_metadata_and_header(self):
-        if self.mosaic_version != 0:
-            metadata = self.mosaic_data['metadata']
-            header = self.mosaic_data['header']
-        else:
-            metadata = list(self.mosaic_data.values())[0]['metadata']
-            header = self.collect_header(self.mosaic_data.values())
-    
+        metadata = self.mosaic_data['metadata']
+        header = self.mosaic_data['header']
         return metadata, header
 
     def add_pmtiles(self, pmtiles_fname):
@@ -392,8 +357,9 @@ class Merger(LoggerMixin):
             self.force_cleanup()
 
         self.populate_mosaic(self.mosaic_url)
-        if 'version' in self.mosaic_data:
-            self.mosaic_version = self.mosaic_data['version']
+        if self.mosaic_data.get('version', None) != 1:
+            raise ValueError('Unsupported mosaic format: version must be 1')
+        self.mosaic_version = self.mosaic_data['version']
 
         if self.output_file.exists() and not self.tracker_file.exists():
             raise Exception(f'Output file {self.archive_writer.output_file} already exists, and no tracker file found. Exiting to avoid overwriting.')
@@ -406,7 +372,7 @@ class Merger(LoggerMixin):
         self.prepare()
 
 
-        slice_data = self.mosaic_data if self.mosaic_version == 0 else self.mosaic_data.get('slices', {})
+        slice_data = self.mosaic_data.get('slices', {})
 
         for k in slice_data.keys():
 
