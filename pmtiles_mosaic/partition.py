@@ -467,7 +467,7 @@ class Partitioner(LoggerMixin):
                                            exclude_transparent=self.exclude_transparent)
 
     def partition_by_y(self, from_zoom_level, to_zoom_level, x_tiles, context):
-        self.log_info(f'Partitioning by y for context: {context}')
+        self.log_info(f'Partitioning by x for context: {context}, {from_zoom_level=}-->{to_zoom_level=}')
 
         tiles_by_y = {}
         for t in x_tiles:
@@ -522,7 +522,7 @@ class Partitioner(LoggerMixin):
             self.complete_current_slice(curr_slice_writer, new_context)
 
     def partition_by_x(self, from_zoom_level, to_zoom_level, tiles_by_z, context):
-        self.log_info(f'Partitioning by x for context: {context}')
+        self.log_info(f'Partitioning by x for context: {context}, {from_zoom_level=}-->{to_zoom_level=}')
 
         tiles_by_x = {}
         for zoom_level in range(from_zoom_level, to_zoom_level + 1):
@@ -579,7 +579,7 @@ class Partitioner(LoggerMixin):
 
     def partition_by_z(self, from_zoom_level, to_zoom_level, tiles, context):
 
-        self.log_info(f'Partitioning by z for context: {context}')
+        self.log_info(f'Partitioning by x for context: {context}, {from_zoom_level=}-->{to_zoom_level=}')
 
         tiles_by_z = {}
         for tile in tiles:
@@ -591,13 +591,19 @@ class Partitioner(LoggerMixin):
 
         top_slice_max_level = None
         for zoom_level in range(from_zoom_level, to_zoom_level + 1):
+            self.log_debug(f'Trying to add zoom level {zoom_level} to top slice for context: {context}')
             top_slice_writer.checkpoint()
 
+
+            self.log_debug(f'Adding zoom level {zoom_level} with {len(tiles_by_z[zoom_level])} tiles to top slice for context: {context}')
             for tile in tiles_by_z[zoom_level]:
                 top_slice_writer.write_tile(tile, self.get_tile_data(tile))
 
+            
+
 
             size_till_now = top_slice_writer.get_size()
+            self.log_debug(f'Size after adding zoom level {zoom_level} is {size_till_now} bytes for context: {context}')
             if size_till_now > self.size_limit_bytes:
                 top_slice_writer.rollback()
                 top_slice_max_level = zoom_level - 1
