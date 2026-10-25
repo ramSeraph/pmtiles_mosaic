@@ -1,4 +1,6 @@
-from .tiles_common import MissingTileError, INTERESTED_METADATA_KEYS, UnsupportedTileFormatError
+import copy
+
+from .tiles_common import MissingTileError, INTERESTED_METADATA_KEYS, get_tile_type
 from .logger import LoggerMixin
  
 # hybrid source that combines multiple tile sources in order
@@ -87,19 +89,12 @@ class StackedTileSource(LoggerMixin):
 
     def get_metadata(self):
         combined_metadata = {}
-        metadatas = []
-        for src in self.srcs:
-            try:
-                metadata = src.get_metadata()
-                metadatas.append(metadata)
-            except UnsupportedTileFormatError:
-                raise
-            except ValueError:
-                metadatas.append({})
-                continue
-        all_empty = all([not metadata for metadata in metadatas])
-        if all_empty:
+        metadatas = [src.get_metadata() for src in self.srcs]
+        if not any(metadatas):
             raise ValueError("No metadata found in any of the sources.")
+        tile_types = {get_tile_type(metadata['format']) for metadata in metadatas if 'format' in metadata}
+        if len(tile_types) > 1:
+            raise ValueError('Cannot combine sources with different tile formats')
 
         for key in INTERESTED_METADATA_KEYS:
             if key == 'vector_layers':
@@ -107,7 +102,7 @@ class StackedTileSource(LoggerMixin):
 
             for metadata in metadatas:
                 if key in metadata:
-                    combined_metadata[key] = metadata[key]
+                    combined_metadata[key] = copy.deepcopy(metadata[key])
                     break
 
         # handle vector layers separately
@@ -117,13 +112,19 @@ class StackedTileSource(LoggerMixin):
             for v in vector_layers:
                 v_id = v['id']
                 if v_id not in all_vector_layers:
-                    all_vector_layers[v_id] = v
+                    all_vector_layers[v_id] = copy.deepcopy(v)
                 else:
                     existing = all_vector_layers[v_id]
-                    if existing['minzoom'] > v['minzoom']:
-                        existing['minzoom'] = v['minzoom']
-                    if existing['maxzoom'] < v['maxzoom']:
-                        existing['maxzoom'] = v['maxzoom']
+                    for key, combine in (('minzoom', min), ('maxzoom', max)):
+                        if key in existing and key in v:
+                            existing[key] = combine(existing[key], v[key])
+                        else:
+                            # An omitted bound must not narrow another source.
+                            existing.pop(key, None)
+                    if 'fields' in v:
+                        fields = existing.setdefault('fields', {})
+                        for name, field_type in v['fields'].items():
+                            fields.setdefault(name, copy.deepcopy(field_type))
 
         if all_vector_layers:
             combined_metadata['vector_layers'] = list(all_vector_layers.values())

@@ -1,3 +1,4 @@
+import copy
 import subprocess
 import sys
 import tempfile
@@ -9,7 +10,7 @@ from mercantile import Tile
 from pmtiles_mosaic.mbtiles_source import MBTilesSource
 from pmtiles_mosaic.stacked_source import StackedTileSource
 from pmtiles_mosaic.tiles_common import MissingTileError
-from tests.helpers import LOGGER, read_pmtiles, write_mbtiles
+from tests.helpers import LOGGER, MemorySource, read_pmtiles, write_mbtiles
 
 
 class MBTilesSourceTests(unittest.TestCase):
@@ -48,3 +49,46 @@ class MBTilesSourceTests(unittest.TestCase):
                     '--log-level', 'ERROR', *options,
                 ], check=True, capture_output=True, text=True, timeout=30)
                 self.assertEqual(read_pmtiles(output), self.tiles)
+
+
+class StackedMetadataTests(unittest.TestCase):
+    def test_layer_merge_preserves_inputs_and_first_source_precedence(self):
+        first = {'format': 'pbf', 'name': 'first', 'vector_layers': [
+            {'id': 'roads', 'minzoom': 3, 'maxzoom': 8, 'fields': {'name': 'String'}},
+        ]}
+        second = {'format': 'mvt', 'name': 'second', 'vector_layers': [
+            {'id': 'roads', 'minzoom': 1, 'maxzoom': 12, 'fields': {'name': 'Number', 'lanes': 'Number'}},
+        ]}
+        originals = copy.deepcopy([first, second])
+        source = StackedTileSource([MemorySource({}, first), MemorySource({}, second)], logger=LOGGER)
+        metadata = source.get_metadata()
+        self.assertEqual(metadata['name'], 'first')
+        self.assertEqual(metadata['format'], 'pbf')
+        self.assertEqual(metadata['vector_layers'], [
+            {'id': 'roads', 'minzoom': 1, 'maxzoom': 12, 'fields': {'name': 'String', 'lanes': 'Number'}},
+        ])
+        self.assertEqual(source.get_metadata(), metadata)
+        metadata['vector_layers'][0]['fields']['name'] = 'Boolean'
+        self.assertEqual([first, second], originals)
+
+    def test_omitted_layer_bounds_remain_unrestricted(self):
+        source = StackedTileSource([
+            MemorySource({}, {'format': 'mvt', 'vector_layers': [{'id': 'roads', 'minzoom': 3}]}),
+            MemorySource({}, {'format': 'mvt', 'vector_layers': [{'id': 'roads', 'maxzoom': 9}]}),
+        ], logger=LOGGER)
+        self.assertEqual(source.get_metadata()['vector_layers'], [{'id': 'roads'}])
+
+    def test_incompatible_formats_and_broken_metadata_are_not_silently_merged(self):
+        source = StackedTileSource([
+            MemorySource({}, {'format': 'png'}), MemorySource({}, {'format': 'jpg'}),
+        ], logger=LOGGER)
+        with self.assertRaisesRegex(ValueError, 'different tile formats'):
+            source.get_metadata()
+
+        class BrokenSource(MemorySource):
+            def get_metadata(self):
+                raise ValueError('invalid metadata')
+
+        source = StackedTileSource([MemorySource({}), BrokenSource({})], logger=LOGGER)
+        with self.assertRaisesRegex(ValueError, 'invalid metadata'):
+            source.get_metadata()
