@@ -12,7 +12,7 @@ export function mosaic(slices = { "map.pmtiles": slice() }) {
       ...slice().header, center_lon_e7: 0, center_lat_e7: 0, center_zoom: 0,
       tile_type: 1, tile_compression: 2,
     },
-    metadata: { format: "pbf", name: "Test map", attribution: "Example attribution" },
+    metadata: { format: "mvt", name: "Test map", attribution: "Example attribution" },
     slices,
   };
 }

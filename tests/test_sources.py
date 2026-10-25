@@ -53,7 +53,7 @@ class MBTilesSourceTests(unittest.TestCase):
 
 class StackedMetadataTests(unittest.TestCase):
     def test_layer_merge_preserves_inputs_and_first_source_precedence(self):
-        first = {'format': 'pbf', 'name': 'first', 'vector_layers': [
+        first = {'format': 'mvt', 'name': 'first', 'vector_layers': [
             {'id': 'roads', 'minzoom': 3, 'maxzoom': 8, 'fields': {'name': 'String'}},
         ]}
         second = {'format': 'mvt', 'name': 'second', 'vector_layers': [
@@ -63,7 +63,7 @@ class StackedMetadataTests(unittest.TestCase):
         source = StackedTileSource([MemorySource({}, first), MemorySource({}, second)], logger=LOGGER)
         metadata = source.get_metadata()
         self.assertEqual(metadata['name'], 'first')
-        self.assertEqual(metadata['format'], 'pbf')
+        self.assertEqual(metadata['format'], 'mvt')
         self.assertEqual(metadata['vector_layers'], [
             {'id': 'roads', 'minzoom': 1, 'maxzoom': 12, 'fields': {'name': 'String', 'lanes': 'Number'}},
         ])

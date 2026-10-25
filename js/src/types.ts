@@ -1,15 +1,14 @@
 import { TileType, tileTypeExt } from "pmtiles";
 import type { Compression } from "pmtiles";
 
-/** PMTiles filename extensions, plus the existing pbf alias for MVT. */
-export type TileFormat = Lowercase<Exclude<keyof typeof TileType, "Unknown" | "Jpeg">> | "pbf" | "jpg";
-export const TILE_FORMATS = Object.freeze([
-  ...Object.values(TileType)
+/** Canonical PMTiles filename extensions. */
+export type TileFormat = Lowercase<Exclude<keyof typeof TileType, "Unknown" | "Jpeg">> | "jpg";
+export const TILE_FORMATS = Object.freeze(
+  Object.values(TileType)
     .filter((type): type is TileType => typeof type === "number")
     .map((type) => tileTypeExt(type).slice(1))
     .filter((format) => format !== ""),
-  "pbf",
-]);
+);
 
 /** Geographic bounds in degrees multiplied by 10,000,000. */
 export type BoundsE7 = readonly [west: number, south: number, east: number, north: number];

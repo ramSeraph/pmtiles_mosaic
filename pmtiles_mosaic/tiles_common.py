@@ -10,7 +10,6 @@ class UnsupportedTileFormatError(ValueError):
 
 
 TILE_TYPES = {
-    'pbf': TileType.MVT,
     'mvt': TileType.MVT,
     'png': TileType.PNG,
     'jpg': TileType.JPEG,

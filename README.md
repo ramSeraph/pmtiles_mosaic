@@ -153,11 +153,15 @@ After partitioning, both scripts generate a `.mosaic.json` file. This file conta
 
 The `pmtiles_mosaic.tile_sources` module provides classes for reading tiles from different sources.
 
+MVT tiles use `format: "mvt"`. Both libraries reject `format: "pbf"`; update
+existing manifest/source metadata to `mvt`. For tile directories, also rename
+`.pbf` files to `.mvt`. The tile encoding is already MVT, so no re-encoding is needed.
+
 JPEG tiles use `format: "jpg"` and the `.jpg` extension. Both libraries reject
 `format: "jpeg"`; for existing directories, rename `.jpeg` tile files to `.jpg`
 and update `metadata.json` before reading or partitioning them.
 
--   `DiskTilesSource`: Reads tiles from a directory on the local disk. It requires a `metadata.json` file in the root of the directory (conforming to the TileJSON spec). While other fields may be present, only the following are used: `type`, `format`, `attribution`, `description`, `name`, `version`, and `vector_layers`. The `format` key is particularly important as it determines the tile file extension (e.g., `png`, `pbf`). The `minzoom` and `maxzoom` are also read from this file; if they are not present, the tool will scan the directory structure to determine the zoom range, which can be slow on large tilesets.
+-   `DiskTilesSource`: Reads tiles from a directory on the local disk. It requires a `metadata.json` file in the root of the directory (conforming to the TileJSON spec). While other fields may be present, only the following are used: `type`, `format`, `attribution`, `description`, `name`, `version`, and `vector_layers`. The `format` key is particularly important as it determines the tile file extension (e.g., `png`, `mvt`). The `minzoom` and `maxzoom` are also read from this file; if they are not present, the tool will scan the directory structure to determine the zoom range, which can be slow on large tilesets.
 -   `MBTilesSource`: Reads tiles from an MBTiles file.
 -   `PMTilesSource`: Reads tiles from a PMTiles file.
 -   `StackedTileSource`: Combines multiple tile sources (Disk, MBTiles, PMTiles) into a single logical source, allowing for seamless access across different storage types.

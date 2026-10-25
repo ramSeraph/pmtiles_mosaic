@@ -23,4 +23,4 @@ with Path(__file__).with_name("sample.pmtiles").open("wb") as out:
         "center_lon_e7": 0,
         "center_lat_e7": 0,
         "center_zoom": 0,
-    }, {"format": "pbf"})
+    }, {"format": "mvt"})

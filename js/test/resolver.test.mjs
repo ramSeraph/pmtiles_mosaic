@@ -119,6 +119,7 @@ test("validates manifests, XYZ coordinates and known tile MIME types", () => {
     [(d) => { d.header.tile_type = 9; }, /tile_type/],
     [(d) => { d.metadata.format = "gif"; }, /format/],
     [(d) => { d.metadata.format = "jpeg"; }, /format/],
+    [(d) => { d.metadata.format = "pbf"; }, /format/],
     [(d) => { d.metadata.vector_layers = [{}]; }, /\.id/],
     [(d) => { d.slices = []; }, /slices must be an object/],
     [(d) => { d.slices.bad = { header: {} }; }, /min_lon_e7/],
@@ -140,9 +141,9 @@ test("validates manifests, XYZ coordinates and known tile MIME types", () => {
   }
 });
 
-test("accepts PMTiles formats and compression enums, including MLT and the pbf alias", () => {
+test("accepts canonical PMTiles formats and compression enums, including MLT", () => {
   const formats = [
-    [TileType.Mvt, "mvt"], [TileType.Mvt, "pbf"], [TileType.Png, "png"],
+    [TileType.Mvt, "mvt"], [TileType.Png, "png"],
     [TileType.Jpeg, "jpg"], [TileType.Webp, "webp"],
     [TileType.Avif, "avif"], [TileType.Mlt, "mlt"],
   ];
