@@ -197,9 +197,17 @@ def get_header_and_metadata(header_base, metadata, tiles):
     return header, header_for_mosaic, metadata
 
 
+def copy_tile_entries(entries):
+    entries = entries.copy()
+    # PMTiles write_tile only mutates the last entry when extending a run.
+    if entries:
+        entries[-1] = copy.copy(entries[-1])
+    return entries
+
+
 class WriterCheckpoint:
     def __init__(self, writer, tiles):
-        self.tile_entries = copy.copy(writer.tile_entries)
+        self.tile_entries = copy_tile_entries(writer.tile_entries)
         self.hash_to_offset = copy.copy(writer.hash_to_offset)
         self.offset = writer.offset
         self.addressed_tiles = writer.addressed_tiles
@@ -284,7 +292,7 @@ class CheckpointablePMTilesWriter(LoggerMixin):
 
         self.tiles = copy.copy(self.last_checkpoint.tiles)
 
-        self.writer.tile_entries = copy.copy(self.last_checkpoint.tile_entries)
+        self.writer.tile_entries = copy_tile_entries(self.last_checkpoint.tile_entries)
         self.writer.hash_to_offset = copy.copy(self.last_checkpoint.hash_to_offset)
         self.writer.offset = self.last_checkpoint.offset
         self.writer.addressed_tiles = self.last_checkpoint.addressed_tiles
@@ -309,10 +317,6 @@ class CheckpointablePMTilesWriter(LoggerMixin):
         return header_for_mosaic
 
     def get_size(self):
-        # TODO: is this required?
-        if self.last_checkpoint and len(self.tiles) == len(self.last_checkpoint.tiles):
-            return self.last_checkpoint.size
-
         if self._is_size_cached:
             return self._cached_size
 
@@ -321,28 +325,18 @@ class CheckpointablePMTilesWriter(LoggerMixin):
         return self._cached_size
 
     def _calculate_size(self):
-        # Estiamating header size will fail if there are no tiles, shortcircuiting here
-        if len(self.tiles) == 0:
+        if not self.tiles:
             return 0
 
-        header = get_header(self.tiles, self.header_base, use_lower_zoom_for_bounds=True)
-
-        prev_tile_f = self.writer.tile_f
-        prev_f = self.writer.f
-
-        self.writer.tile_f = tempfile.TemporaryFile()
-        new_f = tempfile.TemporaryFile()
-        self.writer.f = new_f
-
-        self.writer.finalize(header, self.metadata)
-
-        self.writer.tile_f = prev_tile_f
-        self.writer.f = prev_f
-
-        sz = self.writer.offset + new_f.tell()
-        new_f.close()
-
-        return sz
+        header, _, metadata = get_header_and_metadata(self.header_base, self.metadata, self.tiles)
+        # Finalization sorts entries and closes tile_f. Run it on a copy with
+        # empty payload storage, then add the real payload size to the overhead.
+        writer = copy.copy(self.writer)
+        with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as tiles:
+            writer.f = output
+            writer.tile_f = tiles
+            writer.finalize(header, metadata)
+            return self.writer.offset + output.tell()
 
     def close(self):
         if self.last_checkpoint is not None:
