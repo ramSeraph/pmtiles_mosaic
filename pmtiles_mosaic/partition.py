@@ -493,7 +493,7 @@ class Partitioner(LoggerMixin):
 
         tiles_by_x = {}
         for zoom_level in range(from_zoom_level, to_zoom_level + 1):
-            for tile in tiles_by_z[zoom_level]:
+            for tile in tiles_by_z.get(zoom_level, []):
 
                 if tile.z == from_zoom_level:
                     pt = tile
@@ -558,12 +558,15 @@ class Partitioner(LoggerMixin):
 
         top_slice_max_level = None
         for zoom_level in range(from_zoom_level, to_zoom_level + 1):
+            zoom_tiles = tiles_by_z.get(zoom_level, [])
+            if not zoom_tiles:
+                continue
             self.log_debug(f'Trying to add zoom level {zoom_level} to top slice for context: {context}')
             top_slice_writer.checkpoint()
 
 
-            self.log_debug(f'Adding zoom level {zoom_level} with {len(tiles_by_z[zoom_level])} tiles to top slice for context: {context}')
-            for tile in tiles_by_z[zoom_level]:
+            self.log_debug(f'Adding zoom level {zoom_level} with {len(zoom_tiles)} tiles to top slice for context: {context}')
+            for tile in zoom_tiles:
                 top_slice_writer.write_tile(tile, self.get_tile_data(tile))
 
             
@@ -573,6 +576,8 @@ class Partitioner(LoggerMixin):
             self.log_debug(f'Size after adding zoom level {zoom_level} is {size_till_now} bytes for context: {context}')
             if size_till_now > self.size_limit_bytes:
                 top_slice_writer.rollback()
+                if top_slice_writer.is_empty() and len(zoom_tiles) == 1:
+                    raise ValueError(f'Tile {zoom_tiles[0]} cannot fit within the {self.size_limit_bytes}-byte size limit')
                 top_slice_max_level = zoom_level - 1
                 break
 
@@ -594,15 +599,16 @@ class Partitioner(LoggerMixin):
 
         new_from_zoom_level = top_slice_max_level + 1
 
-        # TODO: think this case through.. you need to stop somewhere and give up
         if len(tiles) <= 1:
-            raise Exception(f'Cannot drill down further, context: {context}')
+            raise ValueError(f'Cannot partition further, context: {context}')
 
         new_context = context + [('z', new_from_zoom_level, to_zoom_level)]
         self.partition_by_x(new_from_zoom_level, to_zoom_level, tiles_by_z, new_context)
 
     def partition(self):
         self.collect_tiles()
+        if not self.all_tiles:
+            raise ValueError('No tiles found in the source')
 
         self.partition_by_z(self.min_zoom_level, self.max_zoom_level, self.all_tiles, [])
 
