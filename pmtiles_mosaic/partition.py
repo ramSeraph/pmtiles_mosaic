@@ -1,12 +1,3 @@
-# /// script
-# requires-python = ">=3.12"
-# dependencies = [
-#     "mercantile",
-#     "pmtiles",
-#     "pillow",
-# ]
-# ///
-
 import sys
 import json
 import gzip

@@ -1,16 +1,3 @@
-#!/usr/bin/env -S uv run 
-# /// script
-# requires-python = ">=3.12"
-# dependencies = [
-#     "mercantile",
-#     "pmtiles",
-#     "requests",
-#     "pypdl",
-#     "colorlog",
-#     "aiohttp",
-# ]
-# ///
-
 import json
 import pickle
 import sqlite3
@@ -289,7 +276,8 @@ class Merger(LoggerMixin):
         self.logger = logger
 
         self.silent_pypdl_logger = logging.getLogger('pypdl_silent')
-        self.silent_pypdl_logger.addHandler(logging.NullHandler())
+        if not self.silent_pypdl_logger.handlers:
+            self.silent_pypdl_logger.addHandler(logging.NullHandler())
         self.silent_pypdl_logger.propagate = False
 
         self.output_file = Path(output_file)

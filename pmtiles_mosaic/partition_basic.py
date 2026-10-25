@@ -1,11 +1,3 @@
-# /// script
-# requires-python = ">=3.12"
-# dependencies = [
-#     "mercantile",
-#     "pmtiles",
-# ]
-# ///
-
 import json
 import argparse
 import sys
