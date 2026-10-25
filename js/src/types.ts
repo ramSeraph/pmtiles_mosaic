@@ -1,3 +1,6 @@
+export const TILE_FORMATS = Object.freeze(["pbf", "mvt", "png", "jpg", "jpeg", "webp", "avif"] as const);
+export type TileFormat = typeof TILE_FORMATS[number];
+
 /** Geographic bounds in degrees multiplied by 10,000,000. */
 export type BoundsE7 = readonly [west: number, south: number, east: number, north: number];
 
@@ -27,7 +30,7 @@ export interface VectorLayer {
 }
 
 export interface MosaicMetadata {
-  readonly format: "pbf" | "mvt" | "png" | "jpg" | "jpeg" | "webp" | "avif";
+  readonly format: TileFormat;
   readonly name?: string;
   readonly description?: string;
   readonly attribution?: string;

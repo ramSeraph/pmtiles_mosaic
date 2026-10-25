@@ -1,9 +1,9 @@
+import { TILE_FORMATS } from "./types.js";
 import type { MosaicDocument, MosaicHeader, MosaicMetadata, SliceHeader, VectorLayer } from "./types.js";
 
 const MAX_LONGITUDE_E7 = 1_800_000_000;
 const MAX_LATITUDE_E7 = 900_000_000;
 const MAX_ZOOM = 26;
-const TILE_FORMATS = ["pbf", "mvt", "png", "jpg", "jpeg", "webp", "avif"];
 
 /** Validate and snapshot a version 1 mosaic so indexes cannot become stale through mutation. */
 export function parseMosaic(value: unknown): MosaicDocument {
@@ -60,7 +60,7 @@ function assertMosaicHeader(value: unknown, path: string): asserts value is Mosa
 
 function assertMetadata(value: unknown, path: string): asserts value is MosaicMetadata {
   assertObject(value, path);
-  if (typeof value.format !== "string" || !TILE_FORMATS.includes(value.format)) {
+  if (!TILE_FORMATS.some((format) => format === value.format)) {
     throw new TypeError(`${path}.format must be a supported tile format`);
   }
   for (const key of ["name", "description", "attribution", "version", "type"]) {
