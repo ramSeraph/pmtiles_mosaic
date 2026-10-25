@@ -11,3 +11,7 @@ wheels/
 
 # version
 pmtiles_mosaic/_version.py
+
+# JavaScript package
+node_modules/
+*.tgz

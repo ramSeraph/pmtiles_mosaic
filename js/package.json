@@ -1,0 +1,58 @@
+{
+  "name": "pmtiles-mosaic",
+  "version": "0.1.0",
+  "description": "Resolve and read tiles from PMTiles mosaics with pluggable indexes and data access",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./flatbush": {
+      "types": "./dist/flatbush.d.ts",
+      "import": "./dist/flatbush.js"
+    },
+    "./pmtiles": {
+      "types": "./dist/pmtiles.d.ts",
+      "import": "./dist/pmtiles.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "src", "LICENSE"],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test test/*.test.mjs && tsc -p test/tsconfig.json",
+    "test:package": "npm run build && node scripts/test-package.mjs",
+    "bench": "npm run build && node bench/resolve.mjs",
+    "prepack": "npm run build"
+  },
+  "peerDependencies": {
+    "flatbush": "^4.6.2",
+    "pmtiles": "^4.5.0"
+  },
+  "peerDependenciesMeta": {
+    "flatbush": { "optional": true },
+    "pmtiles": { "optional": true }
+  },
+  "devDependencies": {
+    "flatbush": "^4.6.2",
+    "pmtiles": "^4.5.0",
+    "typescript": "^5.9.3"
+  },
+  "license": "Unlicense",
+  "author": "Sreeram Kandimalla",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ramSeraph/pmtiles_mosaic.git",
+    "directory": "js"
+  },
+  "homepage": "https://github.com/ramSeraph/pmtiles_mosaic/tree/main/js",
+  "bugs": "https://github.com/ramSeraph/pmtiles_mosaic/issues",
+  "keywords": ["pmtiles", "mosaic", "tiles", "maps", "typescript"]
+}
