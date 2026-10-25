@@ -18,7 +18,10 @@ class MBTilesSource(LoggerMixin):
 
     def get_tile_data(self, tile):
         x, y, z = self._to_xyz(tile.x, tile.y, tile.z)
-        res = self.con.execute(f'select tile_data from tiles where zoom_level={z} and tile_column={x} and tile_row={y};')
+        res = self.con.execute(
+            'SELECT tile_data FROM tiles WHERE zoom_level=? AND tile_column=? AND tile_row=?',
+            (z, x, y),
+        )
         out = res.fetchone()
         if not out:
             raise MissingTileError()
@@ -28,8 +31,11 @@ class MBTilesSource(LoggerMixin):
         data = self.get_tile_data(tile)
         return len(data)
  
-    def all_sizes_z(self, z):
-        res = self.con.execute(f'select tile_column, tile_row, length(tile_data) from tiles where zoom_level={z};')
+    def all_z_sizes(self, z):
+        res = self.con.execute(
+            'SELECT tile_column, tile_row, length(tile_data) FROM tiles WHERE zoom_level=?',
+            (z,),
+        )
         while True:
             t = res.fetchone()
             if not t:
@@ -50,7 +56,7 @@ class MBTilesSource(LoggerMixin):
             tile = mercantile.Tile(x=x, y=y, z=z)
             yield (tile, data)
 
-    def all_z_sizes(self):
+    def all_sizes(self):
         res = self.con.execute('select zoom_level, tile_column, tile_row, length(tile_data) from tiles;')
         while True:
             t = res.fetchone()
