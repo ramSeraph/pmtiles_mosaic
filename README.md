@@ -155,14 +155,13 @@ The `pmtiles_mosaic.tile_sources` module provides classes for reading tiles from
 ## Client Code
 
 The [TypeScript library in `js/`](./js/README.md), packaged for npm as
-`pmtiles-mosaic`, resolves and reads tiles from version 1 mosaics. The core has no
-runtime dependencies and accepts caller-provided manifest loaders, tile readers,
-and index plugins. Separate `pmtiles-mosaic/pmtiles` and
-`pmtiles-mosaic/flatbush` entry points provide PMTiles loading and an optional
-Flatbush index.
+`pmtiles-mosaic`, resolves and reads tiles from version 1 mosaics. It uses PMTiles
+as a peer dependency and accepts caller-provided manifest loaders, tile readers,
+and index plugins. The main entry point provides a replaceable PMTiles reader;
+`pmtiles-mosaic/flatbush` provides an optional Flatbush index.
 
 ```ts
-import { PMTilesMosaic } from "pmtiles-mosaic/pmtiles";
+import { PMTilesMosaic } from "pmtiles-mosaic";
 
 const mosaic = new PMTilesMosaic("https://example.com/map.mosaic.json");
 const tile = await mosaic.getTile(8, 182, 111);

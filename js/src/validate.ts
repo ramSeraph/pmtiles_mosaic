@@ -1,3 +1,4 @@
+import { Compression, TileType } from "pmtiles";
 import { TILE_FORMATS } from "./types.js";
 import type { MosaicDocument, MosaicHeader, MosaicMetadata, SliceHeader, VectorLayer } from "./types.js";
 
@@ -54,8 +55,8 @@ function assertMosaicHeader(value: unknown, path: string): asserts value is Mosa
   integer(value.center_lon_e7, `${path}.center_lon_e7`, -MAX_LONGITUDE_E7, MAX_LONGITUDE_E7);
   integer(value.center_lat_e7, `${path}.center_lat_e7`, -MAX_LATITUDE_E7, MAX_LATITUDE_E7);
   integer(value.center_zoom, `${path}.center_zoom`, 0, MAX_ZOOM);
-  integer(value.tile_type, `${path}.tile_type`, 0, 5);
-  integer(value.tile_compression, `${path}.tile_compression`, 0, 4);
+  enumValue(value.tile_type, `${path}.tile_type`, TileType);
+  enumValue(value.tile_compression, `${path}.tile_compression`, Compression);
 }
 
 function assertMetadata(value: unknown, path: string): asserts value is MosaicMetadata {
@@ -105,6 +106,12 @@ function integer(value: unknown, path: string, min: number, max: number): number
     throw new TypeError(`${path} must be an integer between ${min} and ${max}`);
   }
   return value;
+}
+
+function enumValue(value: unknown, path: string, enumeration: Record<string, string | number>): void {
+  if (typeof value !== "number" || !Object.values(enumeration).includes(value)) {
+    throw new TypeError(`${path} must be a supported PMTiles enum value`);
+  }
 }
 
 function deepFreeze(value: unknown): void {

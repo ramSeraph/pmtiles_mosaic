@@ -1,10 +1,21 @@
+import { TileType } from "pmtiles";
 import { intersects, tileBoundsE7 } from "./geometry.js";
 import { parseMosaic } from "./validate.js";
 import type {
   MosaicDocument, ResolvedSlice, ResolverOptions, SliceIndex, SliceIndexFactory, TileJSON,
 } from "./types.js";
 
-/** Default plugin: no index construction or external dependencies. */
+const MIME_TYPES: Readonly<Record<TileType, string>> = {
+  [TileType.Unknown]: "application/octet-stream",
+  [TileType.Mvt]: "application/vnd.mapbox-vector-tile",
+  [TileType.Png]: "image/png",
+  [TileType.Jpeg]: "image/jpeg",
+  [TileType.Webp]: "image/webp",
+  [TileType.Avif]: "image/avif",
+  [TileType.Mlt]: "application/vnd.maplibre-vector-tile",
+};
+
+/** Default plugin: no index construction. */
 export const createLinearIndex: SliceIndexFactory = (slices) => ({
   search(bounds) {
     const found: number[] = [];
@@ -81,10 +92,7 @@ export class MosaicResolver {
   }
 
   get mimeType(): string {
-    return [
-      "application/octet-stream", "application/vnd.mapbox-vector-tile", "image/png",
-      "image/jpeg", "image/webp", "image/avif",
-    ][this.document.header.tile_type]!;
+    return MIME_TYPES[this.document.header.tile_type] ?? MIME_TYPES[TileType.Unknown];
   }
 
   /** Build TileJSON using caller-provided URL templates for serving tiles. */

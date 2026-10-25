@@ -1,8 +1,15 @@
-import { MosaicClient, MosaicResolver, type SliceIndexFactory, type MosaicDocument } from "pmtiles-mosaic";
+import { MosaicClient, MosaicResolver, createPMTilesReader, PMTilesMosaic, type SliceIndexFactory, type MosaicDocument, type TileFormat } from "pmtiles-mosaic";
+import { Compression, TileType } from "pmtiles";
 import { createFlatbushIndex } from "pmtiles-mosaic/flatbush";
-import { createPMTilesReader, PMTilesMosaic } from "pmtiles-mosaic/pmtiles";
 
 declare const document: MosaicDocument;
+const tileType: TileType = document.header.tile_type;
+const compression: Compression = document.header.tile_compression;
+const formats: readonly TileFormat[] = ["mvt", "pbf", "png", "jpg", "jpeg", "webp", "avif", "mlt"];
+// @ts-expect-error Formats remain a literal union derived from PMTiles, not arbitrary strings.
+const invalidFormat: TileFormat = "gif";
+// @ts-expect-error Unsupported PMTiles enum values cannot appear in a typed header.
+const invalidType: MosaicDocument["header"]["tile_type"] = 99;
 const custom: SliceIndexFactory = (slices, zoom) => ({
   search: (bounds) => slices.flatMap((slice, i) =>
     slice.header.min_zoom <= zoom && slice.header.max_lon_e7 >= bounds[0] ? [i] : []),
@@ -22,4 +29,4 @@ const simple = new PMTilesMosaic("https://example.org/map.mosaic.json", {
   loadMosaic: async () => document,
 });
 const simpleBytes: ArrayBuffer | undefined = (await simple.getTile(0, 0, 0))?.data;
-void [resolver, key, value, bytes, simpleBytes];
+void [resolver, key, value, bytes, simpleBytes, tileType, compression, formats, invalidFormat, invalidType];

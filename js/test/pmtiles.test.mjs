@@ -2,9 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import test from "node:test";
-import { MosaicClient } from "pmtiles-mosaic";
+import { MosaicClient, createPMTilesReader, PMTilesMosaic } from "pmtiles-mosaic";
 import { createFlatbushIndex } from "pmtiles-mosaic/flatbush";
-import { createPMTilesReader, PMTilesMosaic } from "pmtiles-mosaic/pmtiles";
 import { mosaic, slice } from "./helpers.mjs";
 
 const bytes = readFileSync(new URL("fixtures/sample.pmtiles", import.meta.url));
@@ -103,4 +102,24 @@ test("simple PMTiles client can replace both manifest and range fetching", async
   });
   assert.equal(decode(await client.getTile(0, 0, 0)), "world tile");
   assert.equal((await client.getResolver()).slices[0].location, "custom://bucket/maps/sample.pmtiles");
+});
+
+test("simple PMTiles client can replace the tile reader entirely", async () => {
+  const controller = new AbortController();
+  const tile = { data: new Uint8Array([1, 2, 3]).buffer };
+  const reads = [];
+  const client = new PMTilesMosaic("custom://bucket/maps/mosaic.json", {
+    loadMosaic: async () => mosaic({ first: slice(), second: slice() }),
+    getSource: () => { throw new Error("default PMTiles reader must not be used"); },
+    readTile: async (slice, z, x, y, signal) => {
+      assert.equal(signal, controller.signal);
+      reads.push([slice.location, z, x, y]);
+      return slice.key === "second" ? tile : undefined;
+    },
+  });
+  assert.equal(await client.getTile(1, 1, 0, controller.signal), tile);
+  assert.deepEqual(reads, [
+    ["custom://bucket/maps/first", 1, 1, 0],
+    ["custom://bucket/maps/second", 1, 1, 0],
+  ]);
 });

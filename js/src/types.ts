@@ -1,5 +1,16 @@
-export const TILE_FORMATS = Object.freeze(["pbf", "mvt", "png", "jpg", "jpeg", "webp", "avif"] as const);
-export type TileFormat = typeof TILE_FORMATS[number];
+import { TileType, tileTypeExt } from "pmtiles";
+import type { Compression } from "pmtiles";
+
+/** PMTiles format names, plus the conventional MVT and JPEG filename aliases. */
+export type TileFormat = Lowercase<Exclude<keyof typeof TileType, "Unknown">> | "pbf" | "jpg";
+export const TILE_FORMATS = Object.freeze([
+  ...Object.values(TileType)
+    .filter((type): type is TileType => typeof type === "number")
+    .map((type) => tileTypeExt(type).slice(1))
+    .filter((format) => format !== ""),
+  "pbf",
+  "jpeg",
+]);
 
 /** Geographic bounds in degrees multiplied by 10,000,000. */
 export type BoundsE7 = readonly [west: number, south: number, east: number, north: number];
@@ -17,8 +28,8 @@ export interface MosaicHeader extends SliceHeader {
   readonly center_lon_e7: number;
   readonly center_lat_e7: number;
   readonly center_zoom: number;
-  readonly tile_type: 0 | 1 | 2 | 3 | 4 | 5;
-  readonly tile_compression: 0 | 1 | 2 | 3 | 4;
+  readonly tile_type: TileType;
+  readonly tile_compression: Compression;
 }
 
 export interface VectorLayer {

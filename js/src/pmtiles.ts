@@ -11,7 +11,7 @@ export interface PMTilesReaderOptions {
 }
 
 /**
- * Optional PMTiles reader. No I/O happens until a tile is requested.
+ * Pluggable PMTiles reader. No I/O happens until a tile is requested.
  * Each reader retains archive instances and shares a resolved-value directory cache.
  */
 export function createPMTilesReader(options: PMTilesReaderOptions = {}): TileReader<RangeResponse> {
@@ -28,11 +28,13 @@ export function createPMTilesReader(options: PMTilesReaderOptions = {}): TileRea
 }
 
 export interface PMTilesMosaicOptions extends ResolverOptions, PMTilesReaderOptions {
-  /** Override fetching/parsing the manifest while retaining the PMTiles reader. */
+  /** Override fetching/parsing the manifest. */
   readonly loadMosaic?: MosaicLoader;
+  /** Replace the default PMTiles reader; getSource, cache and decompress then do not apply. */
+  readonly readTile?: TileReader<RangeResponse>;
 }
 
-/** HTTP convenience client; the core entry point has no built-in transport. */
+/** Convenience client with replaceable HTTP manifest loading and PMTiles tile reading. */
 export class PMTilesMosaic extends MosaicClient<RangeResponse> {
   constructor(url: string | URL, options: PMTilesMosaicOptions = {}) {
     const location = url.toString();
@@ -46,7 +48,7 @@ export class PMTilesMosaic extends MosaicClient<RangeResponse> {
         }
         return response.json();
       }),
-      readTile: createPMTilesReader(options),
+      readTile: options.readTile ?? createPMTilesReader(options),
     });
   }
 }

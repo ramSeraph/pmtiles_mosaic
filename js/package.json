@@ -14,10 +14,6 @@
       "types": "./dist/flatbush.d.ts",
       "import": "./dist/flatbush.js"
     },
-    "./pmtiles": {
-      "types": "./dist/pmtiles.d.ts",
-      "import": "./dist/pmtiles.js"
-    },
     "./package.json": "./package.json"
   },
   "files": ["dist", "src", "LICENSE"],
@@ -37,8 +33,7 @@
     "pmtiles": "^4.5.0"
   },
   "peerDependenciesMeta": {
-    "flatbush": { "optional": true },
-    "pmtiles": { "optional": true }
+    "flatbush": { "optional": true }
   },
   "devDependencies": {
     "flatbush": "^4.6.2",

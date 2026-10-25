@@ -4,16 +4,21 @@ A TypeScript library for resolving and reading tiles from [PMTiles mosaics](http
 Published as an ES module with TypeScript declarations. Works in modern browsers,
 workers, and Node.js 20+.
 
-The core has **no runtime dependencies**. Manifest loading, tile reading, and
+The library uses **PMTiles as a required peer dependency** for its tile types,
+compression enums, and format extensions. Manifest loading, tile reading, and
 spatial indexing are independent extension points. Each index plugin owns both
-construction and lookup. PMTiles and Flatbush integrations have separate entry
-points and optional peer dependencies.
+construction and lookup. Flatbush is an optional peer, loaded only through its
+separate entry point.
 
-| Entry point | Provides | Additional install |
+| Entry point | Provides | Peer dependencies |
 | --- | --- | --- |
-| `pmtiles-mosaic` | `MosaicResolver`, `MosaicClient`, types, linear index | None |
-| `pmtiles-mosaic/pmtiles` | `PMTilesMosaic`, `createPMTilesReader` | `pmtiles` |
-| `pmtiles-mosaic/flatbush` | `createFlatbushIndex` | `flatbush` |
+| `pmtiles-mosaic` | `MosaicResolver`, `MosaicClient`, `PMTilesMosaic`, `createPMTilesReader`, types, linear index | `pmtiles` |
+| `pmtiles-mosaic/flatbush` | `createFlatbushIndex` | `pmtiles`, `flatbush` |
+
+`MosaicHeader.tile_type` and `tile_compression` use PMTiles' `TileType` and
+`Compression` enums directly. Supported format strings come from `tileTypeExt()`,
+including MLT, with `pbf` and `jpeg` aliases retained for existing mosaics.
+Compression support during tile reads depends on the reader's decompressor.
 
 ## Read tiles with PMTiles
 
@@ -22,7 +27,7 @@ npm install pmtiles-mosaic pmtiles
 ```
 
 ```ts
-import { PMTilesMosaic } from "pmtiles-mosaic/pmtiles";
+import { PMTilesMosaic } from "pmtiles-mosaic";
 
 const mosaic = new PMTilesMosaic("https://example.com/maps/map.mosaic.json");
 const tile = await mosaic.getTile(8, 182, 111);
@@ -48,7 +53,7 @@ argument is an `AbortSignal`.
 ## Resolve without any I/O
 
 ```sh
-npm install pmtiles-mosaic
+npm install pmtiles-mosaic pmtiles
 ```
 
 ```ts
@@ -99,8 +104,7 @@ To keep the PMTiles decoder while supplying your own storage, use the reader
 adapter with a [PMTiles `Source`](https://pmtiles.io/typedoc/interfaces/Source.html):
 
 ```ts
-import { MosaicClient } from "pmtiles-mosaic";
-import { createPMTilesReader } from "pmtiles-mosaic/pmtiles";
+import { MosaicClient, createPMTilesReader } from "pmtiles-mosaic";
 
 const client = new MosaicClient({
   loadMosaic: (signal) => storage.readJson("maps/map.mosaic.json", signal),
@@ -124,6 +128,21 @@ The convenience `PMTilesMosaic` constructor accepts these same `getSource`,
 `cache`, and `decompress` options, plus a `loadMosaic` override. This lets you
 replace manifest fetching and range fetching independently.
 
+You can also replace tile reading entirely on the convenience client:
+
+```ts
+import { PMTilesMosaic } from "pmtiles-mosaic";
+
+const mosaic = new PMTilesMosaic("https://example.com/maps/map.mosaic.json", {
+  readTile: (slice, z, x, y, signal) =>
+    myReader.getTile(slice.location, z, x, y, signal),
+});
+```
+
+This callback returns a PMTiles `RangeResponse` or `undefined`; it replaces the
+default `createPMTilesReader()`. The `getSource`, `cache`, and `decompress` options
+apply only to the default reader. Use `MosaicClient<T>` for other payload types.
+
 ## Opt into Flatbush
 
 ```sh
@@ -143,7 +162,7 @@ const candidates = resolver.resolve(8, 182, 111);
 The same option works with either client:
 
 ```ts
-import { PMTilesMosaic } from "pmtiles-mosaic/pmtiles";
+import { PMTilesMosaic } from "pmtiles-mosaic";
 import { createFlatbushIndex } from "pmtiles-mosaic/flatbush";
 
 const mosaic = new PMTilesMosaic("https://example.com/maps/map.mosaic.json", {
@@ -154,8 +173,8 @@ const mosaic = new PMTilesMosaic("https://example.com/maps/map.mosaic.json", {
 The plugin constructs a Flatbush index for a zoom level on its first query, using
 the mosaic's E7 coordinates in an `Int32Array`. It also implements lookup against
 that index. Unqueried zooms do not allocate indexes. There is **no automatic slice
-count threshold**: callers choose their index. Importing the core or PMTiles
-entry point neither loads nor requires Flatbush.
+count threshold**: callers choose their index. Importing the main entry point
+neither loads nor requires Flatbush.
 
 ## Write an index plugin
 
@@ -221,7 +240,8 @@ npm run bench
 Tests include the specification's example, linear/Flatbush parity, custom I/O,
 cancellation, and an HTTP integration using a small archive written by the
 Python PMTiles package. The package check installs an npm tarball into an isolated
-directory with no optional peers and checks both core runtime imports and types.
+directory with the PMTiles peer and no Flatbush, and checks both core runtime
+imports and types.
 
 `npm run bench` compares construction and query cost for stripe, grid, and
 overlapping layouts at several slice counts. It measures the complete resolver,
@@ -232,7 +252,7 @@ index's advantage.
 To publish, set the intended version in `package.json` and `package-lock.json`,
 run the checks above, then run `npm publish` from `js/`. The `prepack` hook builds
 TypeScript into `dist/`, including declarations and source maps. Package exports
-keep the optional integrations separate. Publishing this npm package is
+keep the integrations separate. Publishing this npm package is
 independent of the repository's Python release workflow.
 
 ## License

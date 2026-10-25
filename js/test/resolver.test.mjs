@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { MosaicResolver, parseMosaic, tileBoundsE7 } from "pmtiles-mosaic";
+import { MosaicResolver, parseMosaic, tileBoundsE7, TILE_FORMATS } from "pmtiles-mosaic";
+import { Compression, TileType } from "pmtiles";
 import { createFlatbushIndex } from "pmtiles-mosaic/flatbush";
 import { mosaic, random, slice } from "./helpers.mjs";
 
@@ -135,6 +136,36 @@ test("validates manifests, XYZ coordinates and known tile MIME types", () => {
     const document = mosaic();
     document.header.tile_type = type;
     assert.equal(new MosaicResolver(document).mimeType, mime);
+  }
+});
+
+test("accepts PMTiles formats and compression enums, including MLT and legacy aliases", () => {
+  const formats = [
+    [TileType.Mvt, "mvt"], [TileType.Mvt, "pbf"], [TileType.Png, "png"],
+    [TileType.Jpeg, "jpg"], [TileType.Jpeg, "jpeg"], [TileType.Webp, "webp"],
+    [TileType.Avif, "avif"], [TileType.Mlt, "mlt"],
+  ];
+  assert.deepEqual([...TILE_FORMATS].sort(), formats.map(([, format]) => format).sort());
+  for (const [tileType, format] of formats) {
+    for (const compression of Object.values(Compression).filter((value) => typeof value === "number")) {
+      const document = mosaic();
+      document.header.tile_type = tileType;
+      document.header.tile_compression = compression;
+      document.metadata.format = format;
+      const resolver = new MosaicResolver(document);
+      assert.equal(resolver.document.header.tile_type, tileType);
+      assert.equal(resolver.document.header.tile_compression, compression);
+      if (tileType === TileType.Mlt) {
+        assert.equal(resolver.mimeType, "application/vnd.maplibre-vector-tile");
+      }
+    }
+  }
+  for (const field of ["tile_type", "tile_compression"]) {
+    for (const invalid of ["Unknown", "1", -1, 1.5, 99, NaN, Infinity]) {
+      const document = mosaic();
+      document.header[field] = invalid;
+      assert.throws(() => parseMosaic(document), new RegExp(field));
+    }
   }
 });
 
