@@ -81,12 +81,14 @@ def parse_size(size_str):
 def adjust_size_limit(intended_size, logger, delta_estimate=None):
     if delta_estimate is None:
         delta_estimate = int(BASE_DELTA * (intended_size / BASE_SIZE_FOR_DELTA))
+    if delta_estimate < 0:
+        raise argparse.ArgumentTypeError('Delta estimate must be nonnegative')
 
     logger.info(f'Using delta estimate: {delta_estimate} bytes for intended size: {intended_size} bytes')
 
     final_size = intended_size - delta_estimate
-    if final_size < 0:
-        raise argparse.ArgumentTypeError(f"Calculated size is negative: {final_size} for {intended_size}")
+    if final_size <= 0:
+        raise argparse.ArgumentTypeError('Delta estimate must be smaller than the size limit')
 
     return final_size
 
@@ -168,7 +170,7 @@ class Partitioner(LoggerMixin):
             expected_bucket_size += curr_level_size
             curr_level += 1
 
-        if curr_level != self.min_zoom_level:
+        if tiles:
             partition_name = None
             if curr_level == self.max_zoom_level + 1:
                 partition_name = ''
@@ -209,7 +211,7 @@ class Partitioner(LoggerMixin):
     
         x_coords = sorted(sizes_by_x.keys())
         if not x_coords:
-            return [], []
+            return [], [], []
     
         current_bucket_tiles = []
         current_bucket_size = 0
@@ -258,6 +260,8 @@ class Partitioner(LoggerMixin):
         self.log_info(f'Top slice max zoom level: {top_slice_max_level}')
 
         if top_slice_max_level == self.max_zoom_level:
+            if not self.tiles_to_slice_idx:
+                raise ValueError('No tiles found in the source')
             self.log_info('No more slicing required')
             return
 
@@ -270,6 +274,8 @@ class Partitioner(LoggerMixin):
     
         for i,bucket in enumerate(buckets):
             self.add_to_current_slice(bucket_tiles[i], expected_bucket_sizes[i])
+        if not self.tiles_to_slice_idx:
+            raise ValueError('No tiles found in the source')
 
     def get_bounds(self, tiles):
     
@@ -480,7 +486,7 @@ def partition_main(args):
     adjusted_size_limit = adjust_size_limit(size_limit_bytes, logger, args.delta_estimate)
     logger.info(f'Partitioning with size limit: {adjusted_size_limit} bytes')
 
-    partitioner = Partitioner(reader, to_pmtiles_prefix, args.size_limit, logger=logger)
+    partitioner = Partitioner(reader, to_pmtiles_prefix, adjusted_size_limit, logger=logger)
 
     partitioner.partition()
 
