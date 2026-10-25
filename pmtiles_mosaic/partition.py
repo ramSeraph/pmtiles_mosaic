@@ -7,7 +7,6 @@
 # ]
 # ///
 
-import re
 import sys
 import json
 import gzip
@@ -26,176 +25,12 @@ from pmtiles.tile import zxy_to_tileid, TileType, Compression
 from pmtiles.writer import Writer as PMTilesWriter
 
 from .tile_sources import create_source_from_paths
-from .tiles_common import get_tile_type
+from .partition_common import (
+    HEADER_EXPORT_KEYS, SLICE_HEADER_EXPORT_KEYS, convert_header, get_bounds,
+    get_header, get_header_and_metadata, get_header_base, get_info,
+    get_pmtiles_file_name, parse_size, prepare_tile_data,
+)
 from .logger import LoggerMixin, get_logger
-
-
-SLICE_HEADER_EXPORT_KEYS = [
-    'min_lon_e7',
-    'min_lat_e7',
-    'max_lon_e7',
-    'max_lat_e7',
-    'min_zoom',
-    'max_zoom',
-]
-
-HEADER_EXPORT_KEYS = SLICE_HEADER_EXPORT_KEYS + [
-    'center_zoom',
-    'center_lon_e7',
-    'center_lat_e7',
-    'tile_type',
-    'tile_compression',
-]
-
-
-
-def parse_size(size_str):
-    size_str = str(size_str).strip().upper()
-
-    intended_size = None
-
-    # Handle preset values
-    if size_str == 'GITHUB_RELEASE':
-        intended_size = 2 * 1024 * 1024 * 1024
-    elif size_str == 'GITHUB_FILE':
-        intended_size = 100 * 1024 * 1024
-    elif size_str == 'CLOUDFLARE_OBJECT':
-        intended_size = 512 * 1024 * 1024
-    else:
-        # Handle numeric values with optional units
-        match = re.match(r'^(\d+)([GKM]?)$', size_str)
-        if not match:
-            raise argparse.ArgumentTypeError(f"Invalid size format: {size_str}")
-
-        value, unit = match.groups()
-        value = int(value)
-
-        if unit == 'G':
-            intended_size = value * 1024 * 1024 * 1024
-        elif unit == 'M':
-            intended_size = value * 1024 * 1024
-        elif unit == 'K':
-            intended_size = value * 1024
-        else:
-            intended_size = value
-
-    # Calculate scaled DELTA
-    if intended_size < 1024 * 1024:  # less than 1MB
-        raise argparse.ArgumentTypeError(f"Size must be at least 1MB, got {size_str}")
-
-    return intended_size
-
-def get_pmtiles_file_name(to_pmtiles_prefix, suffix):
-    if suffix == '':
-        out_pmtiles_file = f'{to_pmtiles_prefix}.pmtiles'
-    else:
-        out_pmtiles_file = f'{to_pmtiles_prefix}-{suffix}.pmtiles'
-
-    return out_pmtiles_file
-
-def get_bounds(tiles):
-
-    bounds = [ mercantile.bounds(t) for t in tiles ]
-
-    max_x = bounds[0].east
-    min_x = bounds[0].west
-    max_y = bounds[0].north
-    min_y = bounds[0].south
-    for b in bounds:
-        if b.east > max_x:
-            max_x = b.east
-
-        if b.west < min_x:
-            min_x = b.west
-
-        if b.north > max_y:
-            max_y = b.north
-
-        if b.south < min_y:
-            min_y = b.south
-
-    return (min_y, min_x, max_y, max_x)
-
-
-def get_info(tiles):
-    tiles_by_z = {}
-
-    for t in tiles:
-        if t.z not in tiles_by_z:
-            tiles_by_z[t.z] = []
-
-        tiles_by_z[t.z].append(t)
-
-    min_z = min(tiles_by_z.keys())
-    max_z = max(tiles_by_z.keys())
-
-    higher_bounds = get_bounds(tiles_by_z[max_z])
-    lower_bounds = get_bounds(tiles_by_z[min_z])
-
-    return min_z, max_z, lower_bounds, higher_bounds
- 
-
-def get_header_base(metadata):
-    tile_type = get_tile_type(metadata['format'])
-    return {
-        "tile_compression": Compression.GZIP if tile_type == TileType.MVT else Compression.NONE,
-        "tile_type": tile_type,
-    }
-
-def get_header(tiles, header_base, use_lower_zoom_for_bounds=False, tiles_info=None):
-
-    header = {}
-    header.update(header_base)
-
-    if tiles_info is None:
-        tiles_info = get_info(tiles)
-
-    min_zoom, max_zoom, lower_bounds, higher_bounds = tiles_info
-
-    lower_min_lat, lower_min_lon, lower_max_lat, lower_max_lon = lower_bounds
-    higher_min_lat, higher_min_lon, higher_max_lat, higher_max_lon = higher_bounds
-
-    header.update({
-        "min_lon_e7": int(lower_min_lon * 10000000) if use_lower_zoom_for_bounds else int(higher_min_lon * 10000000),
-        "min_lat_e7": int(lower_min_lat * 10000000) if use_lower_zoom_for_bounds else int(higher_min_lat * 10000000),
-        "max_lon_e7": int(lower_max_lon * 10000000) if use_lower_zoom_for_bounds else int(higher_max_lon * 10000000),
-        "max_lat_e7": int(lower_max_lat * 10000000) if use_lower_zoom_for_bounds else int(higher_max_lat * 10000000),
-        "min_zoom": min_zoom,
-        "max_zoom": max_zoom,
-        "center_zoom": (max_zoom + min_zoom) // 2,
-        "center_lon_e7": int(10000000 * (higher_min_lon + higher_max_lon)/2),
-        "center_lat_e7": int(10000000 * (higher_min_lat + higher_max_lat)/2),
-    })
-    return header
-
-def convert_header(header, filter_keys):
-    new_header = copy.copy(header)
-    new_header['tile_compression'] = header['tile_compression'].value
-    new_header['tile_type'] = header['tile_type'].value
-    header_keys = list(new_header.keys())
-    for k in header_keys:
-        if k not in filter_keys:
-            del new_header[k]
-    return new_header
-
-         
-def get_header_and_metadata(header_base, metadata, tiles):
-    tiles_info = get_info(tiles)
-    header = get_header(tiles, header_base, use_lower_zoom_for_bounds=False, tiles_info=tiles_info)
-    header_for_mosaic = get_header(tiles, header_base, use_lower_zoom_for_bounds=True, tiles_info=tiles_info)
-
-    metadata = copy.deepcopy(metadata)
-
-    min_zoom = header['min_zoom']
-    max_zoom = header['max_zoom']
-    if 'vector_layers' in metadata:
-        for layer in metadata['vector_layers']:
-            if layer['maxzoom'] > max_zoom:
-                layer['maxzoom'] = max_zoom
-            if layer['minzoom'] < min_zoom:
-                layer['minzoom'] = min_zoom
-
-    return header, header_for_mosaic, metadata
 
 
 def copy_tile_entries(entries):
@@ -235,7 +70,7 @@ class WriterCheckpoint:
 class CheckpointablePMTilesWriter(LoggerMixin):
     def __init__(self, header_base, metadata, logger=None, exclude_transparent=False):
         self.header_base = header_base
-        self.should_be_compressed = (header_base.get('tile_compression', Compression.NONE) == Compression.GZIP)
+        self.tile_compression = header_base.get('tile_compression', Compression.NONE)
         self.metadata = metadata
         self.logger = logger
         self.exclude_transparent = exclude_transparent
@@ -256,7 +91,6 @@ class CheckpointablePMTilesWriter(LoggerMixin):
 
     def write_tile(self, tile, tdata):
         self._is_size_cached = False
-        is_compressed = (tdata[0:2] == b"\x1f\x8b")
 
         if self.exclude_transparent and self.is_transparent_empty(tdata, self.tile_type):
             return
@@ -264,8 +98,7 @@ class CheckpointablePMTilesWriter(LoggerMixin):
         self.tiles.append(tile)
         tile_id = zxy_to_tileid(tile.z, tile.x, tile.y)
 
-        if self.should_be_compressed and not is_compressed:
-            tdata = gzip.compress(tdata)
+        tdata = prepare_tile_data(tdata, self.tile_compression)
 
         self.writer.write_tile(tile_id, tdata)
 
