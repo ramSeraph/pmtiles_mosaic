@@ -25,7 +25,7 @@ remaining fields below are optional. Additional metadata properties may be prese
 | `name` | string | Human-readable tileset name. |
 | `description` | string | Description of the tileset's contents. |
 | `attribution` | string | Attribution text for display. |
-| `format` | string | Tile format: `pbf`, `mvt`, `png`, `jpg`, `jpeg`, `webp`, `avif`, or `mlt`. |
+| `format` | string | Tile format: `pbf`, `mvt`, `png`, `jpg`, `webp`, `avif`, or `mlt`. JPEG tiles use `jpg`; `jpeg` is not accepted. |
 | `type` | string | Tileset type, commonly `overlay` or `baselayer`. |
 | `version` | string | Version of the tileset, separate from the mosaic format version. |
 | `vector_layers` | array of objects | Vector layer definitions, including fields such as `id`, `minzoom`, `maxzoom`, and `fields`. |
@@ -70,7 +70,7 @@ For example, `125000000` means `12.5` degrees.
 | `0` | Unknown |
 | `1` | MVT (`pbf` or `mvt`) |
 | `2` | PNG |
-| `3` | JPEG (`jpg` or `jpeg`) |
+| `3` | JPEG (`jpg`) |
 | `4` | WebP |
 | `5` | AVIF |
 | `6` | MLT |

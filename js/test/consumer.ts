@@ -5,9 +5,11 @@ import { createFlatbushIndex } from "pmtiles-mosaic/flatbush";
 declare const document: MosaicDocument;
 const tileType: TileType = document.header.tile_type;
 const compression: Compression = document.header.tile_compression;
-const formats: readonly TileFormat[] = ["mvt", "pbf", "png", "jpg", "jpeg", "webp", "avif", "mlt"];
+const formats: readonly TileFormat[] = ["mvt", "pbf", "png", "jpg", "webp", "avif", "mlt"];
 // @ts-expect-error Formats remain a literal union derived from PMTiles, not arbitrary strings.
 const invalidFormat: TileFormat = "gif";
+// @ts-expect-error JPEG tiles use the jpg extension, not jpeg.
+const removedJpegAlias: TileFormat = "jpeg";
 // @ts-expect-error Unsupported PMTiles enum values cannot appear in a typed header.
 const invalidType: MosaicDocument["header"]["tile_type"] = 99;
 const custom: SliceIndexFactory = (slices, zoom) => ({
@@ -29,4 +31,4 @@ const simple = new PMTilesMosaic("https://example.org/map.mosaic.json", {
   loadMosaic: async () => document,
 });
 const simpleBytes: ArrayBuffer | undefined = (await simple.getTile(0, 0, 0))?.data;
-void [resolver, key, value, bytes, simpleBytes, tileType, compression, formats, invalidFormat, invalidType];
+void [resolver, key, value, bytes, simpleBytes, tileType, compression, formats, invalidFormat, removedJpegAlias, invalidType];

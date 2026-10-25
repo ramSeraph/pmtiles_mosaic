@@ -3,7 +3,7 @@ import json
 
 import mercantile
 
-from .tiles_common import MissingTileError, INTERESTED_METADATA_KEYS
+from .tiles_common import MissingTileError, INTERESTED_METADATA_KEYS, get_tile_type
 from .logger import LoggerMixin
 
 class MBTilesSource(LoggerMixin):
@@ -91,6 +91,8 @@ class MBTilesSource(LoggerMixin):
                 continue
             metadata[k] = full_metadata[k]
 
+        if 'format' in metadata:
+            get_tile_type(metadata['format'])
         return metadata
 
             

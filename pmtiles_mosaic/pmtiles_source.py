@@ -13,7 +13,7 @@ from pmtiles.tile import (
     tileid_to_zxy,
 )
 
-from .tiles_common import MissingTileError
+from .tiles_common import MissingTileError, get_tile_type
 from .logger import LoggerMixin
 
 # pmtiles sources
@@ -81,6 +81,9 @@ class PMTilesSource(LoggerMixin):
         return int(self.reader.header()['max_zoom'])
 
     def get_metadata(self):
-        return self.reader.metadata()
+        metadata = self.reader.metadata()
+        if 'format' in metadata:
+            get_tile_type(metadata['format'])
+        return metadata
 
 

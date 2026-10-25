@@ -1,4 +1,4 @@
-from .tiles_common import MissingTileError, INTERESTED_METADATA_KEYS
+from .tiles_common import MissingTileError, INTERESTED_METADATA_KEYS, UnsupportedTileFormatError
 from .logger import LoggerMixin
  
 # hybrid source that combines multiple tile sources in order
@@ -92,6 +92,8 @@ class StackedTileSource(LoggerMixin):
             try:
                 metadata = src.get_metadata()
                 metadatas.append(metadata)
+            except UnsupportedTileFormatError:
+                raise
             except ValueError:
                 metadatas.append({})
                 continue

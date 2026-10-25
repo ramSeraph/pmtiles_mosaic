@@ -25,6 +25,7 @@ from pmtiles.tile import zxy_to_tileid, TileType, Compression
 from pmtiles.writer import Writer as PMTilesWriter
 
 from .tile_sources import create_source_from_paths
+from .tiles_common import get_tile_type
 from .logger import LoggerMixin, get_logger
 
 
@@ -134,39 +135,11 @@ def get_info(tiles):
  
 
 def get_header_base(metadata):
-
-    format_string = metadata['format']
-    if format_string == "mvt":
-        format_string = "pbf"
-
-    if format_string == "jpg":
-        format_string = "jpeg"
-
-    is_vector_tiles = (format_string == "pbf")
-
-    if is_vector_tiles:
-        tile_compression = Compression.GZIP
-    else:
-        tile_compression = Compression.NONE
-
-    if format_string in "pbf":
-        tile_type = TileType.MVT
-    elif format_string == "png":
-        tile_type = TileType.PNG
-    elif format_string == "jpeg":
-        tile_type = TileType.JPEG
-    elif format_string == "webp":
-        tile_type = TileType.WEBP
-    elif format_string == "avif":
-        tile_type = TileType.AVIF
-    else:
-        tile_type = TileType.UNKNOWN
-
-    header = {
-        "tile_compression": tile_compression,
+    tile_type = get_tile_type(metadata['format'])
+    return {
+        "tile_compression": Compression.GZIP if tile_type == TileType.MVT else Compression.NONE,
         "tile_type": tile_type,
     }
-    return header
 
 def get_header(tiles, header_base, use_lower_zoom_for_bounds=False, tiles_info=None):
 

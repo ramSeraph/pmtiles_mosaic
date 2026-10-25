@@ -27,6 +27,7 @@ from pmtiles.writer import Writer
 from pmtiles.tile import zxy_to_tileid, Compression, TileType
 
 from .logger import LoggerMixin, get_logger
+from .tiles_common import get_tile_type
 
 # heavily copied from https://github.com/protomaps/PMTiles/blob/main/python/pmtiles/convert.py
 # and https://github.com/mapbox/mbutil/blob/master/mbutil/util.py
@@ -359,6 +360,7 @@ class Merger(LoggerMixin):
         self.populate_mosaic(self.mosaic_url)
         if self.mosaic_data.get('version', None) != 1:
             raise ValueError('Unsupported mosaic format: version must be 1')
+        get_tile_type(self.mosaic_data['metadata']['format'])
         self.mosaic_version = self.mosaic_data['version']
 
         if self.output_file.exists() and not self.tracker_file.exists():

@@ -147,6 +147,10 @@ After partitioning, both scripts generate a `.mosaic.json` file. This file conta
 
 The `pmtiles_mosaic.tile_sources` module provides classes for reading tiles from different sources.
 
+JPEG tiles use `format: "jpg"` and the `.jpg` extension. Both libraries reject
+`format: "jpeg"`; for existing directories, rename `.jpeg` tile files to `.jpg`
+and update `metadata.json` before reading or partitioning them.
+
 -   `DiskTilesSource`: Reads tiles from a directory on the local disk. It requires a `metadata.json` file in the root of the directory (conforming to the TileJSON spec). While other fields may be present, only the following are used: `type`, `format`, `attribution`, `description`, `name`, `version`, and `vector_layers`. The `format` key is particularly important as it determines the tile file extension (e.g., `png`, `pbf`). The `minzoom` and `maxzoom` are also read from this file; if they are not present, the tool will scan the directory structure to determine the zoom range, which can be slow on large tilesets.
 -   `MBTilesSource`: Reads tiles from an MBTiles file.
 -   `PMTilesSource`: Reads tiles from a PMTiles file.
@@ -176,6 +180,9 @@ resolution without I/O, and index plugins. The implementation builds on the
 ## Contributing
 
 Contributions are welcome! If you find a bug or have a feature request, please open an issue or submit a pull request.
+
+Run the Python tests with `uv run python -m unittest discover -s tests`.
+See [js/README.md](./js/README.md#development-and-publishing) for TypeScript checks.
 
 ## License
 

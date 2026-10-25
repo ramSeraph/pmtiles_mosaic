@@ -19,6 +19,7 @@ from pmtiles.tile import zxy_to_tileid, TileType, Compression
 from pmtiles.writer import Writer as PMTilesWriter
 
 from .tile_sources import create_source_from_paths
+from .tiles_common import get_tile_type
 from .logger import LoggerMixin, get_logger
 
 BASE_SIZE_FOR_DELTA = 2 * 1024 * 1024 * 1024 # 2GB
@@ -324,22 +325,11 @@ class Partitioner(LoggerMixin):
 
         src_metadata = self.reader.get_metadata()
 
-        format_string = src_metadata['format']
-        if format_string == "mvt":
-            format_string = "pbf"
-
-        if format_string == "jpg":
-            format_string = "jpeg"
-
-        is_vector_tiles = (format_string == "pbf")
-
-        if is_vector_tiles:
-            tile_compression = Compression.GZIP
-        else:
-            tile_compression = Compression.NONE
+        tile_type = get_tile_type(src_metadata['format'])
 
         header = {
-            "tile_compression": tile_compression,
+            "tile_type": tile_type,
+            "tile_compression": Compression.GZIP if tile_type == TileType.MVT else Compression.NONE,
             "min_lon_e7": int(lower_min_lon * 10000000) if use_lower_zoom_for_bounds else int(higher_min_lon * 10000000),
             "min_lat_e7": int(lower_min_lat * 10000000) if use_lower_zoom_for_bounds else int(higher_min_lat * 10000000),
             "max_lon_e7": int(lower_max_lon * 10000000) if use_lower_zoom_for_bounds else int(higher_max_lon * 10000000),
@@ -350,19 +340,6 @@ class Partitioner(LoggerMixin):
             "center_lon_e7": int(10000000 * (higher_min_lon + higher_max_lon)/2),
             "center_lat_e7": int(10000000 * (higher_min_lat + higher_max_lat)/2),
         }
-        if format_string in "pbf":
-            header["tile_type"] = TileType.MVT
-        elif format_string == "png":
-            header["tile_type"] = TileType.PNG
-        elif format_string == "jpeg":
-            header["tile_type"] = TileType.JPEG
-        elif format_string == "webp":
-            header["tile_type"] = TileType.WEBP
-        elif format_string == "avif":
-            header["tile_type"] = TileType.AVIF
-        else:
-            header["tile_type"] = TileType.UNKNOWN
-
         return header
          
     def get_header_and_metadata(self, tiles):

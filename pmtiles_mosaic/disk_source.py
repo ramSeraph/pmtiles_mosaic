@@ -3,7 +3,7 @@ from pathlib import Path
 
 import mercantile
 
-from .tiles_common import MissingTileError, INTERESTED_METADATA_KEYS
+from .tiles_common import MissingTileError, INTERESTED_METADATA_KEYS, get_tile_type
 from .logger import LoggerMixin
 
 class DiskTilesSource(LoggerMixin):
@@ -104,6 +104,8 @@ class DiskTilesSource(LoggerMixin):
             if key in full_metadata:
                 metadata[key] = full_metadata[key]
 
+        if 'format' in metadata:
+            get_tile_type(metadata['format'])
         return metadata
 
     @property

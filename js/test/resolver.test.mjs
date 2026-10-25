@@ -118,6 +118,7 @@ test("validates manifests, XYZ coordinates and known tile MIME types", () => {
     [(d) => { d.header.min_lat_e7 = 900000000; }, /inverted bounds/],
     [(d) => { d.header.tile_type = 9; }, /tile_type/],
     [(d) => { d.metadata.format = "gif"; }, /format/],
+    [(d) => { d.metadata.format = "jpeg"; }, /format/],
     [(d) => { d.metadata.vector_layers = [{}]; }, /\.id/],
     [(d) => { d.slices = []; }, /slices must be an object/],
     [(d) => { d.slices.bad = { header: {} }; }, /min_lon_e7/],
@@ -139,10 +140,10 @@ test("validates manifests, XYZ coordinates and known tile MIME types", () => {
   }
 });
 
-test("accepts PMTiles formats and compression enums, including MLT and legacy aliases", () => {
+test("accepts PMTiles formats and compression enums, including MLT and the pbf alias", () => {
   const formats = [
     [TileType.Mvt, "mvt"], [TileType.Mvt, "pbf"], [TileType.Png, "png"],
-    [TileType.Jpeg, "jpg"], [TileType.Jpeg, "jpeg"], [TileType.Webp, "webp"],
+    [TileType.Jpeg, "jpg"], [TileType.Webp, "webp"],
     [TileType.Avif, "avif"], [TileType.Mlt, "mlt"],
   ];
   assert.deepEqual([...TILE_FORMATS].sort(), formats.map(([, format]) => format).sort());

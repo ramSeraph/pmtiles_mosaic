@@ -17,7 +17,8 @@ separate entry point.
 
 `MosaicHeader.tile_type` and `tile_compression` use PMTiles' `TileType` and
 `Compression` enums directly. Supported format strings come from `tileTypeExt()`,
-including MLT, with `pbf` and `jpeg` aliases retained for existing mosaics.
+including MLT, with the `pbf` alias retained for existing mosaics. JPEG tiles use
+`jpg`; the `jpeg` alias is not accepted.
 Compression support during tile reads depends on the reader's decompressor.
 
 ## Read tiles with PMTiles

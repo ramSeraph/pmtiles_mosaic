@@ -1,0 +1,29 @@
+name: Python package
+
+on:
+  push:
+    paths:
+      - "pmtiles_mosaic/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/python.yml"
+  pull_request:
+    paths:
+      - "pmtiles_mosaic/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/python.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --locked
+      - run: uv run --no-sync python -m unittest discover -s tests
