@@ -14,6 +14,7 @@ import gzip
 import copy
 import tempfile
 import argparse
+import logging
 
 from pathlib import Path
 
@@ -205,6 +206,21 @@ def copy_tile_entries(entries):
     return entries
 
 
+def is_transparent_empty(tdata, tile_type, logger=None):
+    if tile_type not in (TileType.PNG, TileType.WEBP):
+        return False
+    try:
+        if tdata.startswith(b'\x1f\x8b'):
+            tdata = gzip.decompress(tdata)
+        image_format = 'PNG' if tile_type == TileType.PNG else 'WEBP'
+        with Image.open(io.BytesIO(tdata), formats=[image_format]) as image:
+            if 'A' in image.getbands() or 'transparency' in image.info:
+                return image.convert('RGBA').getchannel('A').getextrema()[1] == 0
+    except (OSError, ValueError):
+        (logger or logging.getLogger(__name__)).warning('Error checking transparency', exc_info=True)
+    return False
+
+
 class WriterCheckpoint:
     def __init__(self, writer, tiles):
         self.tile_entries = copy_tile_entries(writer.tile_entries)
@@ -234,24 +250,7 @@ class CheckpointablePMTilesWriter(LoggerMixin):
 
 
     def is_transparent_empty(self, tdata, tile_type):
-
-        img_format = 'PNG' if tile_type == TileType.PNG else 'WEBP'
-
-        try:
-            with Image.open(io.BytesIO(tdata), formats=[img_format]) as im:
-                # Check for transparency
-                if im.mode in ('RGBA', 'LA') or (im.mode == 'P' and 'transparency' in im.info):
-                    # Get alpha channel
-                    if im.mode != 'A':
-                        alpha = im.getchannel('A')
-                    else:
-                        alpha = im
-                    min_alpha, max_alpha = alpha.getextrema()
-                    return max_alpha == 0
-        except Exception:
-            self.log_warning("Error checking transparency", exc_info=True)
-
-        return False
+        return is_transparent_empty(tdata, tile_type, self.logger)
 
 
 
@@ -259,15 +258,8 @@ class CheckpointablePMTilesWriter(LoggerMixin):
         self._is_size_cached = False
         is_compressed = (tdata[0:2] == b"\x1f\x8b")
 
-        if self.exclude_transparent and self.tile_type in [TileType.PNG, TileType.WEBP]:
-            if is_compressed:
-                # decompress first
-                tdata_uncompressed = gzip.decompress(tdata)
-                if self.is_transparent_empty(tdata_uncompressed, self.tile_type):
-                    return
-            else:
-                if self.is_transparent_empty(tdata, self.tile_type):
-                    return
+        if self.exclude_transparent and self.is_transparent_empty(tdata, self.tile_type):
+            return
 
         self.tiles.append(tile)
         tile_id = zxy_to_tileid(tile.z, tile.x, tile.y)
@@ -403,12 +395,16 @@ class Partitioner(LoggerMixin):
         self.log_info(f'Collecting tiles from source{caching_msg}...')
 
         count = 0
-        if self.should_cache:
+        check_transparency = self.exclude_transparent and self.header_base['tile_type'] in (TileType.PNG, TileType.WEBP)
+        if self.should_cache or check_transparency:
             for tile, tdata in self.reader.all():
+                if check_transparency and is_transparent_empty(tdata, self.header_base['tile_type'], self.logger):
+                    continue
                 if count % 100000 == 0:
                     self.log_info(f'Handled {count} tiles...')
                 self.all_tiles.append(tile)
-                self.cache_tile(tile, tdata)
+                if self.should_cache:
+                    self.cache_tile(tile, tdata)
                 count += 1
         else:
             for tile, tsize in self.reader.all_sizes():
@@ -430,8 +426,7 @@ class Partitioner(LoggerMixin):
  
     def create_new_writer(self):
         return CheckpointablePMTilesWriter(self.header_base, self.src_metadata,
-                                           logger=self.logger,
-                                           exclude_transparent=self.exclude_transparent)
+                                           logger=self.logger)
 
     def partition_by_y(self, from_zoom_level, to_zoom_level, x_tiles, context):
         self.log_info(f'Partitioning by x for context: {context}, {from_zoom_level=}-->{to_zoom_level=}')

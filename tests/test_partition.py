@@ -1,3 +1,6 @@
+import gzip
+import io
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -5,6 +8,7 @@ from unittest.mock import patch
 
 from mercantile import Tile
 from pmtiles.tile import tileid_to_zxy
+from PIL import Image
 
 from pmtiles_mosaic.partition import CheckpointablePMTilesWriter, Partitioner, get_header_base
 from tests.helpers import LOGGER, MemorySource, read_pmtiles
@@ -120,3 +124,35 @@ class RecursivePartitionTests(unittest.TestCase):
         partitioner = self.make_partitioner({Tile(0, 0, 0): b'a' * 1000, Tile(0, 0, 1): b'b'}, size_limit=600)
         with self.assertRaisesRegex(ValueError, 'cannot fit'):
             partitioner.partition()
+
+    def test_transparent_palette_pngs_are_excluded_before_bounds_and_splitting(self):
+        image = Image.new('P', (2, 2), 0)
+        buffer = io.BytesIO()
+        image.save(buffer, format='PNG', transparency=0)
+        transparent = buffer.getvalue()
+        opaque = Image.new('RGBA', (2, 2), (255, 0, 0, 255))
+        buffer = io.BytesIO()
+        opaque.save(buffer, format='PNG')
+        first, second = Tile(0, 0, 1), Tile(1, 1, 1)
+        opaque_data = buffer.getvalue()
+        # Different trailing bytes prevent deduplication and force two slices.
+        kept = {first: opaque_data + b'a' * 200, second: opaque_data + b'b' * 200}
+        tiles = {Tile(0, 0, 0): transparent, Tile(3, 3, 2): gzip.compress(transparent), **kept}
+        for cache in (True, False):
+            with self.subTest(cache=cache):
+                partitioner = self.make_partitioner(tiles, size_limit=550, should_cache=cache, exclude_transparent=True)
+                partitioner.partition()
+                partitioner.finalize()
+                self.assert_output_tiles(partitioner, kept)
+                self.assertEqual(set(partitioner.all_tiles), set(kept))
+                mosaic = json.loads((self.root / 'map.mosaic.json').read_text())
+                self.assertEqual((mosaic['header']['min_zoom'], mosaic['header']['max_zoom']), (1, 1))
+
+    def test_all_transparent_tiles_fail_without_creating_output(self):
+        buffer = io.BytesIO()
+        Image.new('RGBA', (2, 2), (0, 0, 0, 0)).save(buffer, format='PNG')
+        tiles = {Tile(0, 0, 0): buffer.getvalue(), Tile(0, 0, 1): buffer.getvalue()}
+        partitioner = self.make_partitioner(tiles, exclude_transparent=True)
+        with self.assertRaisesRegex(ValueError, 'No tiles'):
+            partitioner.partition()
+        self.assertEqual(list(self.root.iterdir()), [])
