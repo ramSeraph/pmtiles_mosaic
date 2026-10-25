@@ -43,6 +43,12 @@ This script reads all the PMTiles partitions listed in a mosaic JSON file (remot
 > [!NOTE]
 > The download is resumable. If it's interrupted, you can simply rerun the same command to continue from where it left off.
 
+Slice completion is recorded with the archive checkpoint, so restarting does
+not replay an already committed slice. PMTiles output is published by an atomic
+rename after finalization. Checkpoints are tied to the original mosaic; changed
+mosaics and checkpoints from older versions without completion records require
+an explicit restart with `--force`.
+
 > [!NOTE]
 > When using `download-mosaic` to download remote mosaics as `.pmtiles` files, an interruption might break some of the deduplication functionality in the pmtiles writer, leading to some deduplication not being caught. This can be avoided by running the tool with the `PYTHONHASHSEED` environment variable set to `0`.
 

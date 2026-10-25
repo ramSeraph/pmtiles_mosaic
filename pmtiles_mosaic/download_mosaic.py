@@ -15,6 +15,8 @@ import json
 import pickle
 import sqlite3
 import logging
+import hashlib
+import os
 
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlparse, urljoin, unquote
@@ -40,10 +42,16 @@ class PmtilesArchiveWriter(LoggerMixin):
         self.meta_file = None
         self.force = force
         self.logger = logger
+        self.completed_stages = set()
+        self.mosaic_id = None
+        self.temporary_output = Path(str(output_file) + '.tmp')
 
-    def init(self):
+    def init(self, mosaic_id=None, resume=False):
         tile_file = self.output_file.with_suffix('.tiles.bin')
         meta_file = self.output_file.with_suffix('.meta.pkl')
+        self.tile_file = tile_file
+        self.meta_file = meta_file
+        self.mosaic_id = mosaic_id
 
         if self.force:
             self.log_info("Force flag is active. Cleaning up pmtiles writer leftover files.")
@@ -54,30 +62,38 @@ class PmtilesArchiveWriter(LoggerMixin):
                 self.log_info(f"Deleting {meta_file}")
                 meta_file.unlink()
 
-        self.pmtiles_writer = Writer(open(self.output_file, 'wb'))
+        meta = pickle.loads(meta_file.read_bytes()) if meta_file.exists() else None
+        if meta is not None:
+            if meta.get('checkpoint_version') != 1:
+                raise ValueError('Legacy PMTiles checkpoint cannot be resumed safely; restart with --force')
+            if meta['mosaic_id'] != mosaic_id:
+                raise ValueError('Mosaic changed since the checkpoint; restart with --force')
+            self.completed_stages = set(meta['completed_stages'])
+            if 'finalize' in self.completed_stages and self.output_file.exists():
+                return
+        elif resume or (tile_file.exists() and tile_file.stat().st_size):
+            raise ValueError('Missing PMTiles checkpoint; restart with --force')
+
+        offset = meta['offset'] if meta else 0
+        size = tile_file.stat().st_size if tile_file.exists() else 0
+        if size < offset:
+            raise ValueError('PMTiles tile data is shorter than its checkpoint; restart with --force')
+
+        output = open(self.temporary_output, 'wb')
+        try:
+            self.pmtiles_writer = Writer(output)
+        except BaseException:
+            output.close()
+            raise
         self.pmtiles_writer.tile_f.close()
-        self.pmtiles_writer.tile_f = open(tile_file, 'a+b')
-        self.tile_file = tile_file
-
-        meta_file = self.output_file.with_suffix('.meta.pkl')
-        self.meta_file = meta_file
-        if not meta_file.exists():
+        self.pmtiles_writer.tile_f = open(tile_file, 'r+b' if tile_file.exists() else 'w+b')
+        if meta is not None:
+            for key in ('tile_entries', 'hash_to_offset', 'offset', 'addressed_tiles', 'clustered'):
+                setattr(self.pmtiles_writer, key, meta[key])
+        self.pmtiles_writer.tile_f.truncate(offset)
+        self.pmtiles_writer.tile_f.seek(offset)
+        if meta is None:
             self.dump_meta()
-            return
-
-        self.log_info(f'Resuming from existing tile file {tile_file} and meta file {meta_file}')
-        meta = pickle.loads(meta_file.read_bytes())
-        self.pmtiles_writer.tile_entries = meta['tile_entries']
-        self.pmtiles_writer.hash_to_offset = meta['hash_to_offset']
-        self.pmtiles_writer.offset = meta['offset']
-        self.pmtiles_writer.addressed_tiles = meta['addressed_tiles']
-        self.pmtiles_writer.clustered = meta['clustered']
-
-        tile_file_size = self.tile_file.stat().st_size
-        if tile_file_size != self.pmtiles_writer.offset:
-            self.log_warning(f'Truncating {self.tile_file} from {tile_file_size} to {self.pmtiles_writer.offset}')
-            self.pmtiles_writer.tile_f.seek(self.pmtiles_writer.offset)
-            self.pmtiles_writer.tile_f.truncate()
 
 
     def prepare(self):
@@ -89,17 +105,27 @@ class PmtilesArchiveWriter(LoggerMixin):
 
     def dump_meta(self):
         meta = {
+            'checkpoint_version': 1,
+            'mosaic_id': self.mosaic_id,
+            'completed_stages': self.completed_stages,
             "tile_entries": self.pmtiles_writer.tile_entries,
             "hash_to_offset": self.pmtiles_writer.hash_to_offset,
             "offset": self.pmtiles_writer.offset,
             "addressed_tiles": self.pmtiles_writer.addressed_tiles,
             "clustered": self.pmtiles_writer.clustered,
         }
-        self.meta_file.write_bytes(pickle.dumps(meta))
+        temporary = Path(str(self.meta_file) + '.tmp')
+        with temporary.open('wb') as output:
+            pickle.dump(meta, output)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, self.meta_file)
 
-    def commit(self):
-        self.dump_meta()
+    def commit(self, stage):
         self.pmtiles_writer.tile_f.flush()
+        os.fsync(self.pmtiles_writer.tile_f.fileno())
+        self.completed_stages.add(stage)
+        self.dump_meta()
 
     def enhance_header(self, h):
         h['tile_compression'] = Compression(h['tile_compression'])
@@ -107,11 +133,19 @@ class PmtilesArchiveWriter(LoggerMixin):
 
 
     def finalize(self, metadata, header):
+        header = dict(header)
         self.enhance_header(header)
         self.pmtiles_writer.finalize(header, metadata)
+        self.pmtiles_writer.f.flush()
+        os.fsync(self.pmtiles_writer.f.fileno())
         self.pmtiles_writer.f.close()
-        self.tile_file.unlink()
-        self.meta_file.unlink()
+        os.replace(self.temporary_output, self.output_file)
+        self.completed_stages.add('finalize')
+        self.dump_meta()
+
+    def cleanup(self):
+        for path in (self.tile_file, self.meta_file, self.temporary_output, Path(str(self.meta_file) + '.tmp')):
+            path.unlink(missing_ok=True)
 
     def close(self):
         if self.pmtiles_writer is not None:
@@ -126,20 +160,34 @@ class MbtilesArchiveWriter(LoggerMixin):
         self.output_file = output_file
         self.force = force
         self.logger = logger
+        self.completed_stages = set()
+        self.mosaic_id = None
 
-    def init(self):
+    def init(self, mosaic_id=None, resume=False):
+        self.mosaic_id = mosaic_id
+        if resume and not self.output_file.exists():
+            raise ValueError('Missing MBTiles output; restart with --force')
         self.conn = sqlite3.connect(self.output_file)
         self.cursor = self.conn.cursor()
+        tables = {row[0] for row in self.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        if 'mosaic_state' in tables:
+            state = dict(self.conn.execute('SELECT key, value FROM mosaic_state'))
+            if state['mosaic_id'] != mosaic_id:
+                raise ValueError('Mosaic changed since the checkpoint; restart with --force')
+            self.completed_stages = set(json.loads(state['completed_stages']))
+        elif tables or resume:
+            raise ValueError('Legacy or missing MBTiles checkpoint; restart with --force')
 
     def prepare(self):
-        self.cursor.execute("""PRAGMA synchronous=0""")
         self.cursor.execute("""PRAGMA locking_mode=EXCLUSIVE""")
         self.cursor.execute("""PRAGMA journal_mode=DELETE""")
-
+        self.cursor.execute('BEGIN')
         self.cursor.execute("CREATE TABLE metadata (name text, value text);")
         self.cursor.execute(
             "CREATE TABLE tiles (zoom_level integer, tile_column integer, tile_row integer, tile_data blob);"
         )
+        self.cursor.execute('CREATE TABLE mosaic_state (key TEXT PRIMARY KEY, value TEXT)')
+        self.cursor.execute('INSERT INTO mosaic_state VALUES (?, ?)', ('mosaic_id', self.mosaic_id))
 
     def add_to_archive(self, zxy, tile_data):
         flipped_y = (1 << zxy[0]) - 1 - zxy[2]
@@ -148,7 +196,12 @@ class MbtilesArchiveWriter(LoggerMixin):
             (zxy[0], zxy[1], flipped_y, tile_data),
         )
 
-    def commit(self):
+    def commit(self, stage):
+        self.completed_stages.add(stage)
+        self.cursor.execute(
+            'INSERT OR REPLACE INTO mosaic_state VALUES (?, ?)',
+            ('completed_stages', json.dumps(sorted(self.completed_stages))),
+        )
         self.conn.commit()
 
     def add_metadata(self, metadata):
@@ -176,10 +229,8 @@ class MbtilesArchiveWriter(LoggerMixin):
         self.cursor.execute(
             "CREATE UNIQUE INDEX tile_index on tiles (zoom_level, tile_column, tile_row);"
         )
-        self.conn.commit()
+        self.commit('finalize')
         self.cursor.execute("""ANALYZE;""")
-    
-        self.conn.close()
 
     def enhance_metadata(self, cm, ch):
     
@@ -198,6 +249,7 @@ class MbtilesArchiveWriter(LoggerMixin):
         cm['center'] = f"{center_lon},{center_lat},{center_zoom}"
 
     def finalize(self, metadata, header):
+        metadata = dict(metadata)
         self.enhance_metadata(metadata, header)
         self.add_metadata(metadata)
         self.finalize_mbtiles()
@@ -205,6 +257,9 @@ class MbtilesArchiveWriter(LoggerMixin):
     def close(self):
         if self.conn is not None:
             self.conn.close()
+
+    def cleanup(self):
+        pass
 
 def get_filename_from_url(url):
     if is_local(url):
@@ -293,20 +348,25 @@ class Merger(LoggerMixin):
             connect=self.request_timeout_secs,
             sock_read=self.request_timeout_secs
         )
-        downloader.start(url=url, 
-                        file_path=str(file),
+        temporary = Path(str(file) + '.download')
+        if self.force:
+            temporary.unlink(missing_ok=True)
+            self._cleanup_pypdl_leftovers(temporary)
+        downloader.start(url=url,
+                        file_path=str(temporary),
                         retries=self.num_http_retries, 
-                        timeout=timeout)
+                        timeout=timeout,
+                        display=False)
+        if downloader.failed or not temporary.is_file():
+            raise OSError(f'Download failed: {url}')
+        os.replace(temporary, file)
 
     def init_tracker(self):
         if not self.tracker_file.exists():
             self.tracker_file.write_text("")
 
     def populate_done_list(self):
-        if not self.tracker_file.exists():
-            return
-
-        self.done_stages = set(self.tracker_file.read_text().strip().split('\n'))
+        self.done_stages = set(self.archive_writer.completed_stages)
 
     def mark_as_done(self, stage):
         with open(self.tracker_file, 'a') as f:
@@ -359,7 +419,6 @@ class Merger(LoggerMixin):
         try:
             for tile, tile_data in source.all():
                 self.archive_writer.add_to_archive((tile.z, tile.x, tile.y), tile_data)
-            self.archive_writer.commit()
         finally:
             source.cleanup()
 
@@ -368,7 +427,7 @@ class Merger(LoggerMixin):
             return
 
         self.archive_writer.prepare()
-
+        self.archive_writer.commit('prepare')
         self.mark_as_done('prepare')
 
     def process(self):
@@ -383,6 +442,8 @@ class Merger(LoggerMixin):
         if self.mosaic_data.get('version', None) != 1:
             raise ValueError('Unsupported mosaic format: version must be 1')
         get_tile_type(self.mosaic_data['metadata']['format'])
+        if not self.mosaic_data['slices']:
+            raise ValueError('Mosaic must contain at least one slice')
         self.mosaic_version = self.mosaic_data['version']
         self.check_output_paths([
             self.get_pmtiles_file(self.get_pmtiles_url(key)) for key in self.mosaic_data['slices']
@@ -395,9 +456,14 @@ class Merger(LoggerMixin):
             raise Exception(f'Output file {self.archive_writer.output_file} already exists, and no tracker file found. Exiting to avoid overwriting.')
 
         self.init_tracker()
+        base = str(get_local_path(self.mosaic_url).resolve()) if is_local(self.mosaic_url) else self.mosaic_url
+        mosaic_id = hashlib.sha256(json.dumps([base, self.mosaic_data], sort_keys=True).encode()).hexdigest()
+        self.archive_writer.init(mosaic_id, resume=bool(self.tracker_file.read_text().strip()))
         self.populate_done_list()
-
-        self.archive_writer.init()
+        if 'finalize' in self.done_stages:
+            if not self.output_file.exists():
+                raise ValueError('Completed output is missing')
+            return
 
         self.prepare()
 
@@ -422,7 +488,7 @@ class Merger(LoggerMixin):
                 self.download_file(pmtiles_url, pmtiles_file)
             
             self.add_pmtiles(pmtiles_file)
-
+            self.archive_writer.commit(k)
             self.mark_as_done(k)
 
             if not is_local(pmtiles_url):
@@ -436,6 +502,7 @@ class Merger(LoggerMixin):
         if self.archive_type == 'pmtiles':
             destinations.extend([
                 self.output_file.with_suffix('.tiles.bin'), self.output_file.with_suffix('.meta.pkl'),
+                Path(str(self.output_file) + '.tmp'), Path(str(self.output_file.with_suffix('.meta.pkl')) + '.tmp'),
             ])
         for source in inputs:
             for destination in destinations:
@@ -448,6 +515,7 @@ class Merger(LoggerMixin):
         if self.tracker_file.exists():
             self.tracker_file.unlink()
             self.log_debug('Tracker file deleted.')
+        self.archive_writer.cleanup()
 
         mosaic_file = self.get_mosaic_file()
         if not is_local(self.mosaic_url) and mosaic_file.exists():
