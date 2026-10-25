@@ -9,6 +9,7 @@ from pmtiles.tile import zxy_to_tileid
 from pmtiles.writer import Writer as PMTilesWriter
 
 from .tile_sources import create_source_from_paths
+from .errors import EmptySourceError
 from .partition_common import (
     HEADER_EXPORT_KEYS, SLICE_HEADER_EXPORT_KEYS, convert_header, get_bounds,
     get_header, get_header_and_metadata, get_header_base, get_info,
@@ -183,7 +184,7 @@ class Partitioner(LoggerMixin):
 
         if top_slice_max_level == self.max_zoom_level:
             if not self.tiles_to_slice_idx:
-                raise ValueError('No tiles found in the source')
+                raise EmptySourceError('No tiles found in the source')
             self.log_info('No more slicing required')
             return
 
@@ -197,7 +198,7 @@ class Partitioner(LoggerMixin):
         for i,bucket in enumerate(buckets):
             self.add_to_current_slice(bucket_tiles[i], expected_bucket_sizes[i])
         if not self.tiles_to_slice_idx:
-            raise ValueError('No tiles found in the source')
+            raise EmptySourceError('No tiles found in the source')
 
     def get_bounds(self, tiles):
         return get_bounds(tiles)

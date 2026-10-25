@@ -35,7 +35,7 @@ class ResourceTests(unittest.TestCase):
 
     def test_mbtiles_reader_never_creates_or_writes_its_input(self):
         path = self.root / 'missing.mbtiles'
-        with self.assertRaises(sqlite3.OperationalError):
+        with self.assertRaises(FileNotFoundError):
             MBTilesSource(path)
         self.assertFalse(path.exists())
         write_mbtiles(path, {self.tile: b'tile'})
@@ -56,7 +56,7 @@ class ResourceTests(unittest.TestCase):
         write_pmtiles(path, {self.tile: b'tile'})
         source = PMTilesSource(path)
         with patch('pmtiles_mosaic.tile_sources.PMTilesSource', return_value=source):
-            with self.assertRaisesRegex(ValueError, 'Invalid source'):
+            with self.assertRaises(FileNotFoundError):
                 create_source_from_paths([path, self.root / 'missing'])
         self.assertTrue(source.file.closed)
         self.assertTrue(source.mapping.closed)

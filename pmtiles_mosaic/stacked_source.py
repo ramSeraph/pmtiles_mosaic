@@ -2,6 +2,7 @@ import copy
 from contextlib import ExitStack
 
 from .tiles_common import MissingTileError, INTERESTED_METADATA_KEYS, get_tile_type
+from .errors import EmptySourceError, SourceMetadataError
 from .logger import LoggerMixin
  
 # hybrid source that combines multiple tile sources in order
@@ -67,11 +68,11 @@ class StackedTileSource(LoggerMixin):
         for src in self.srcs:
             try:
                 min_zooms.append(src.min_zoom)
-            except ValueError:
+            except EmptySourceError:
                 continue
 
         if len(min_zooms) == 0:
-            raise ValueError("No zoom levels found in any of the sources.")
+            raise EmptySourceError('No tiles found in any of the sources')
 
         return min(min_zooms)
 
@@ -81,11 +82,11 @@ class StackedTileSource(LoggerMixin):
         for src in self.srcs:
             try:
                 max_zooms.append(src.max_zoom)
-            except ValueError:
+            except EmptySourceError:
                 continue
 
         if len(max_zooms) == 0:
-            raise ValueError("No zoom levels found in any of the sources.")
+            raise EmptySourceError('No tiles found in any of the sources')
 
         return max(max_zooms)
 
@@ -93,10 +94,11 @@ class StackedTileSource(LoggerMixin):
         combined_metadata = {}
         metadatas = [src.get_metadata() for src in self.srcs]
         if not any(metadatas):
-            raise ValueError("No metadata found in any of the sources.")
+            raise SourceMetadataError('No metadata found in any of the sources')
         tile_types = {get_tile_type(metadata['format']) for metadata in metadatas if 'format' in metadata}
         if len(tile_types) > 1:
-            raise ValueError('Cannot combine sources with different tile formats')
+            formats = sorted({metadata['format'] for metadata in metadatas if 'format' in metadata})
+            raise SourceMetadataError(f'Cannot combine sources with different tile formats: {", ".join(formats)}')
 
         for key in INTERESTED_METADATA_KEYS:
             if key == 'vector_layers':

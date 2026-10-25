@@ -9,6 +9,7 @@ import mercantile
 from pmtiles.tile import Compression, TileType
 
 from .tiles_common import get_tile_type
+from .errors import SourceMetadataError
 
 
 SLICE_HEADER_EXPORT_KEYS = [
@@ -69,6 +70,8 @@ def get_info(tiles):
 
 
 def get_header_base(metadata):
+    if 'format' not in metadata:
+        raise SourceMetadataError('Missing format in tile source metadata')
     tile_type = get_tile_type(metadata['format'])
     return {
         'tile_type': tile_type,

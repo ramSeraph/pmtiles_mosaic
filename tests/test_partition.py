@@ -11,6 +11,7 @@ from pmtiles.tile import tileid_to_zxy
 from PIL import Image
 
 from pmtiles_mosaic.partition import CheckpointablePMTilesWriter, Partitioner, get_header_base
+from pmtiles_mosaic.errors import EmptySourceError
 from tests.helpers import LOGGER, MemorySource, read_pmtiles
 
 
@@ -113,7 +114,7 @@ class RecursivePartitionTests(unittest.TestCase):
 
     def test_empty_source_fails_before_creating_partitions(self):
         partitioner = self.make_partitioner({})
-        with self.assertRaisesRegex(ValueError, 'No tiles'):
+        with self.assertRaisesRegex(EmptySourceError, 'No tiles'):
             partitioner.partition()
         self.assertEqual(list(self.root.iterdir()), [])
 
@@ -150,6 +151,6 @@ class RecursivePartitionTests(unittest.TestCase):
         Image.new('RGBA', (2, 2), (0, 0, 0, 0)).save(buffer, format='PNG')
         tiles = {Tile(0, 0, 0): buffer.getvalue(), Tile(0, 0, 1): buffer.getvalue()}
         partitioner = self.make_partitioner(tiles, exclude_transparent=True)
-        with self.assertRaisesRegex(ValueError, 'No tiles'):
+        with self.assertRaisesRegex(EmptySourceError, 'No tiles'):
             partitioner.partition()
         self.assertEqual(list(self.root.iterdir()), [])

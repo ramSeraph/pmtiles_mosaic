@@ -8,6 +8,7 @@ from pathlib import Path
 from mercantile import Tile
 
 from pmtiles_mosaic.mbtiles_source import MBTilesSource
+from pmtiles_mosaic.errors import SourceMetadataError
 from pmtiles_mosaic.stacked_source import StackedTileSource
 from pmtiles_mosaic.tiles_common import MissingTileError
 from tests.helpers import LOGGER, MemorySource, read_pmtiles, write_mbtiles
@@ -82,7 +83,7 @@ class StackedMetadataTests(unittest.TestCase):
         source = StackedTileSource([
             MemorySource({}, {'format': 'png'}), MemorySource({}, {'format': 'jpg'}),
         ], logger=LOGGER)
-        with self.assertRaisesRegex(ValueError, 'different tile formats'):
+        with self.assertRaisesRegex(SourceMetadataError, 'different tile formats'):
             source.get_metadata()
 
         class BrokenSource(MemorySource):

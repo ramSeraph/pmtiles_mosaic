@@ -1,5 +1,6 @@
 
 import mmap
+import json
 
 import mercantile
 
@@ -15,6 +16,7 @@ from pmtiles.tile import (
 )
 
 from .tiles_common import MissingTileError, get_tile_type
+from .errors import SourceMetadataError
 from .logger import LoggerMixin
 
 # pmtiles sources
@@ -93,9 +95,14 @@ class PMTilesSource(LoggerMixin):
         return int(self.reader.header()['max_zoom'])
 
     def get_metadata(self):
-        metadata = self.reader.metadata()
+        try:
+            metadata = self.reader.metadata()
+        except (json.JSONDecodeError, UnicodeDecodeError) as error:
+            raise SourceMetadataError(f'Invalid JSON metadata in {self.file.name}: {error}') from error
+        if not isinstance(metadata, dict):
+            raise SourceMetadataError(f'Metadata in {self.file.name} must be a JSON object')
         if 'format' in metadata:
-            get_tile_type(metadata['format'])
+            get_tile_type(metadata['format'], self.file.name)
         return metadata
 
 

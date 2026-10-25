@@ -16,6 +16,7 @@ from pmtiles.tile import zxy_to_tileid, TileType, Compression
 from pmtiles.writer import Writer as PMTilesWriter
 
 from .tile_sources import create_source_from_paths
+from .errors import EmptySourceError
 from .partition_common import (
     HEADER_EXPORT_KEYS, SLICE_HEADER_EXPORT_KEYS, convert_header, get_bounds,
     get_header, get_header_and_metadata, get_header_base, get_info,
@@ -435,7 +436,7 @@ class Partitioner(LoggerMixin):
         try:
             self.collect_tiles()
             if not self.all_tiles:
-                raise ValueError('No tiles found in the source')
+                raise EmptySourceError('No tiles found in the source')
             self.partition_by_z(self.min_zoom_level, self.max_zoom_level, self.all_tiles, [])
         finally:
             self.close()

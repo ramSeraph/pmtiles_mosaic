@@ -9,6 +9,7 @@ from pathlib import Path
 from mercantile import Tile
 
 from pmtiles_mosaic.partition_basic import Partitioner, adjust_size_limit
+from pmtiles_mosaic.errors import EmptySourceError
 from tests.helpers import LOGGER, MemorySource, read_pmtiles, write_mbtiles
 
 
@@ -44,7 +45,7 @@ class BasicPartitionTests(unittest.TestCase):
     def test_empty_source_does_not_create_an_empty_partition(self):
         partitioner = Partitioner(MemorySource({}), str(self.root / 'empty'), 1000, logger=LOGGER)
         self.assertEqual(partitioner.get_buckets({}, {}), ([], [], []))
-        with self.assertRaisesRegex(ValueError, 'No tiles'):
+        with self.assertRaisesRegex(EmptySourceError, 'No tiles'):
             partitioner.partition()
         self.assertEqual(partitioner.slices, [])
 

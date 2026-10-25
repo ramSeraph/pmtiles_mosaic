@@ -1,9 +1,12 @@
-import json
 from pathlib import Path
 
 import mercantile
 
-from .tiles_common import MissingTileError, INTERESTED_METADATA_KEYS, get_tile_type
+from .errors import EmptySourceError, SourceMetadataError
+from .tiles_common import (
+    MissingTileError, INTERESTED_METADATA_KEYS, get_tile_type,
+    parse_metadata_json, parse_metadata_zoom,
+)
 from .logger import LoggerMixin
 
 class DiskTilesSource(LoggerMixin):
@@ -11,6 +14,8 @@ class DiskTilesSource(LoggerMixin):
         self.logger = logger
         self.dir = Path(directory)
         metadata = self.get_metadata()
+        if 'format' not in metadata:
+            raise SourceMetadataError(f'Missing format in {self.get_tilejson_file()}')
         self.ext = metadata['format']
 
     def _get_tile_from_file(self, file):
@@ -72,14 +77,14 @@ class DiskTilesSource(LoggerMixin):
     def get_min_zoom(self):
         zoom_levels = self._get_zoom_levels()
         if len(zoom_levels) == 0:
-            raise ValueError("No zoom directories found in the disk source.")
+            raise EmptySourceError(f'No tiles found in {self.dir}')
 
         return min(zoom_levels)
 
     def get_max_zoom(self):
         zoom_levels = self._get_zoom_levels()
         if len(zoom_levels) == 0:
-            raise ValueError("No zoom directories found in the disk source.")
+            raise EmptySourceError(f'No tiles found in {self.dir}')
 
         return max(zoom_levels)
 
@@ -89,10 +94,7 @@ class DiskTilesSource(LoggerMixin):
     def get_full_metadata(self):
         tilejson_file = self.get_tilejson_file()
 
-        if not tilejson_file.exists():
-            raise ValueError("TileJSON file not found in the disk source.")
-
-        return json.loads(tilejson_file.read_text())
+        return parse_metadata_json(tilejson_file.read_bytes(), tilejson_file)
 
     # this is supposed to match what is expected in a pmtiles metadata dict
     def get_metadata(self):
@@ -105,27 +107,21 @@ class DiskTilesSource(LoggerMixin):
                 metadata[key] = full_metadata[key]
 
         if 'format' in metadata:
-            get_tile_type(metadata['format'])
+            get_tile_type(metadata['format'], self.get_tilejson_file())
         return metadata
 
     @property
     def min_zoom(self):
-        try:
-            full_metadata = self.get_full_metadata()
-            return int(full_metadata['minzoom'])
-        except ValueError:
-            raise
-        except Exception:
+        full_metadata = self.get_full_metadata()
+        if 'minzoom' not in full_metadata:
             return self.get_min_zoom()
+        return parse_metadata_zoom(full_metadata['minzoom'], 'minzoom', self.get_tilejson_file())
  
     @property
     def max_zoom(self):
-        try:
-            full_metadata = self.get_full_metadata()
-            return int(full_metadata['maxzoom'])
-        except ValueError:
-            raise
-        except Exception:
+        full_metadata = self.get_full_metadata()
+        if 'maxzoom' not in full_metadata:
             return self.get_max_zoom()
+        return parse_metadata_zoom(full_metadata['maxzoom'], 'maxzoom', self.get_tilejson_file())
 
 

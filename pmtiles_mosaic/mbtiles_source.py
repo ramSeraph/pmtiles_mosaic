@@ -1,16 +1,21 @@
 import sqlite3
-import json
 from pathlib import Path
 
 import mercantile
 
-from .tiles_common import MissingTileError, INTERESTED_METADATA_KEYS, get_tile_type
+from .errors import EmptySourceError
+from .tiles_common import (
+    MissingTileError, INTERESTED_METADATA_KEYS, get_tile_type,
+    parse_metadata_json, parse_metadata_zoom,
+)
 from .logger import LoggerMixin
 
 class MBTilesSource(LoggerMixin):
     def __init__(self, fname, logger=None):
         self.logger = logger
-        self.con = sqlite3.connect(Path(fname).resolve().as_uri() + '?mode=ro', uri=True)
+        self.path = Path(fname)
+        self.path.stat()
+        self.con = sqlite3.connect(self.path.resolve().as_uri() + '?mode=ro', uri=True)
         self._full_metadata = None
 
     def _to_xyz(self, x, y, z):
@@ -80,7 +85,7 @@ class MBTilesSource(LoggerMixin):
             k = row[0]
             v = row[1]
             if k == 'json':
-                json_data = json.loads(v)
+                json_data = parse_metadata_json(v, self.path)
                 for k, v in json_data.items():
                     all_metadata[k] = v
                 continue
@@ -99,23 +104,28 @@ class MBTilesSource(LoggerMixin):
             metadata[k] = full_metadata[k]
 
         if 'format' in metadata:
-            get_tile_type(metadata['format'])
+            get_tile_type(metadata['format'], self.path)
         return metadata
 
             
-    def _get_meta_prop(self, prop_name):
+    def _get_zoom(self, prop_name, aggregate):
         full_metadata = self.get_full_metadata()
         if prop_name in full_metadata:
-            return full_metadata[prop_name]
-
-        raise ValueError(f"Source does not have a {prop_name} property.")
+            return parse_metadata_zoom(full_metadata[prop_name], prop_name, self.path)
+        # Zoom metadata is optional. Distinguish an empty tiles table from a
+        # populated source that simply omits the corresponding metadata row.
+        query = {'min': 'SELECT MIN(zoom_level) FROM tiles', 'max': 'SELECT MAX(zoom_level) FROM tiles'}[aggregate]
+        value = self.con.execute(query).fetchone()[0]
+        if value is None:
+            raise EmptySourceError(f'No tiles found in {self.path}')
+        return parse_metadata_zoom(value, prop_name, self.path)
 
     @property
     def min_zoom(self):
-        return int(self._get_meta_prop('minzoom'))
+        return self._get_zoom('minzoom', 'min')
 
     @property
     def max_zoom(self):
-        return int(self._get_meta_prop('maxzoom'))
+        return self._get_zoom('maxzoom', 'max')
 
 
