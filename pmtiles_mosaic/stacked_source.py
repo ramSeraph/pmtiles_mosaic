@@ -1,4 +1,5 @@
 import copy
+from contextlib import ExitStack
 
 from .tiles_common import MissingTileError, INTERESTED_METADATA_KEYS, get_tile_type
 from .logger import LoggerMixin
@@ -56,8 +57,9 @@ class StackedTileSource(LoggerMixin):
                 yield (tile, size)
 
     def cleanup(self):
-        for src in self.srcs:
-            src.cleanup()
+        with ExitStack() as resources:
+            for src in self.srcs:
+                resources.callback(src.cleanup)
 
     @property
     def min_zoom(self):

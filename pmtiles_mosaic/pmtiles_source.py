@@ -1,8 +1,9 @@
 
+import mmap
+
 import mercantile
 
 from pmtiles.reader import (
-    MmapSource, 
     Reader as PMTilesReader, 
     all_tiles,
 )
@@ -40,8 +41,16 @@ class PMTilesSource(LoggerMixin):
     def __init__(self, fname, logger=None):
         self.logger = logger
         self.file = open(fname, 'rb')
-        self.src = MmapSource(self.file)
+        try:
+            self.mapping = mmap.mmap(self.file.fileno(), 0, access=mmap.ACCESS_READ)
+        except BaseException:
+            self.file.close()
+            raise
+        self.src = self.get_bytes
         self.reader = PMTilesReader(self.src)
+
+    def get_bytes(self, offset, length):
+        return self.mapping[offset:offset + length]
 
     def get_tile_data(self, tile):
         data = self.reader.get(tile.z, tile.x, tile.y)
@@ -70,7 +79,10 @@ class PMTilesSource(LoggerMixin):
             yield (tile, size)
 
     def cleanup(self):
-        self.file.close()
+        try:
+            self.mapping.close()
+        finally:
+            self.file.close()
 
     @property
     def min_zoom(self):

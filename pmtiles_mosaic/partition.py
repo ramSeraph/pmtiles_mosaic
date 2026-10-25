@@ -303,9 +303,10 @@ class CheckpointablePMTilesWriter(LoggerMixin):
     def finalize(self, pmtiles_fname):
         self.writer.f.close()
         Path(pmtiles_fname).parent.mkdir(parents=True, exist_ok=True)
-        self.writer.f = open(pmtiles_fname, 'wb')
         header, header_for_mosaic, metadata = get_header_and_metadata(self.header_base, self.metadata, self.tiles)
-        self.writer.finalize(header, metadata)
+        with open(pmtiles_fname, 'wb') as output:
+            self.writer.f = output
+            self.writer.finalize(header, metadata)
         return header_for_mosaic
 
     def get_size(self):
@@ -331,8 +332,9 @@ class CheckpointablePMTilesWriter(LoggerMixin):
             return self.writer.offset + output.tell()
 
     def close(self):
-        if self.last_checkpoint is not None:
-            del self.last_checkpoint
+        self.writer.f.close()
+        self.writer.tile_f.close()
+        self.last_checkpoint = None
 
 
 class Partitioner(LoggerMixin):
@@ -361,6 +363,7 @@ class Partitioner(LoggerMixin):
         self.cache_dict = {}
         self.cache_file = tempfile.TemporaryFile()
         self.cache_offset = 0
+        self._writers = set()
 
 
     def get_current_partition_filename(self):
@@ -418,15 +421,19 @@ class Partitioner(LoggerMixin):
             pmtiles_file_name = self.get_current_partition_filename()
 
         self.log_info(f'Finalizing partition {pmtiles_file_name} with {len(curr_slice_writer.tiles)} tiles, context: {context}')
-        header = curr_slice_writer.finalize(pmtiles_file_name)
-        curr_slice_writer.close()
+        try:
+            header = curr_slice_writer.finalize(pmtiles_file_name)
+        finally:
+            curr_slice_writer.close()
+            self._writers.discard(curr_slice_writer)
         self.headers.append(header)
         self.partition_names.append(Path(pmtiles_file_name).name)
         self.part_count += 1
  
     def create_new_writer(self):
-        return CheckpointablePMTilesWriter(self.header_base, self.src_metadata,
-                                           logger=self.logger)
+        writer = CheckpointablePMTilesWriter(self.header_base, self.src_metadata, logger=self.logger)
+        self._writers.add(writer)
+        return writer
 
     def partition_by_y(self, from_zoom_level, to_zoom_level, x_tiles, context):
         self.log_info(f'Partitioning by x for context: {context}, {from_zoom_level=}-->{to_zoom_level=}')
@@ -601,11 +608,19 @@ class Partitioner(LoggerMixin):
         self.partition_by_x(new_from_zoom_level, to_zoom_level, tiles_by_z, new_context)
 
     def partition(self):
-        self.collect_tiles()
-        if not self.all_tiles:
-            raise ValueError('No tiles found in the source')
+        try:
+            self.collect_tiles()
+            if not self.all_tiles:
+                raise ValueError('No tiles found in the source')
+            self.partition_by_z(self.min_zoom_level, self.max_zoom_level, self.all_tiles, [])
+        finally:
+            self.close()
 
-        self.partition_by_z(self.min_zoom_level, self.max_zoom_level, self.all_tiles, [])
+    def close(self):
+        for writer in self._writers:
+            writer.close()
+        self._writers.clear()
+        self.cache_file.close()
 
     def write_mosaic_file(self, mosaic_data):
 
@@ -657,11 +672,12 @@ def partition_main(args):
 
     logger.info(f'Size limit: {args.size_limit} bytes')
 
-    partitioner = Partitioner(reader, to_pmtiles_prefix, args.size_limit, not args.no_cache, logger=logger, exclude_transparent=args.exclude_transparent)
-
-    partitioner.partition()
-
-    partitioner.finalize()
+    try:
+        partitioner = Partitioner(reader, to_pmtiles_prefix, args.size_limit, not args.no_cache, logger=logger, exclude_transparent=args.exclude_transparent)
+        partitioner.partition()
+        partitioner.finalize()
+    finally:
+        reader.cleanup()
 
 def cli():
     partition_main(sys.argv[1:])

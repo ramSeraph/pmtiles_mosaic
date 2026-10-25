@@ -13,6 +13,7 @@ import argparse
 import re
 import sys
 from pathlib import Path
+from contextlib import ExitStack
 
 import mercantile
 from pmtiles.tile import zxy_to_tileid, TileType, Compression
@@ -380,6 +381,10 @@ class Partitioner(LoggerMixin):
         self.log_info(f'Wrote mosaic file to {out_mosaic_file}')
 
     def write_partitions(self):
+        with ExitStack() as resources:
+            self._write_partitions(resources)
+
+    def _write_partitions(self, resources):
 
         # go through all tiles and create a list of all tiles and a mapping from tile to slice index
         # could have calculate bounds here, but easier/more readable to do it later
@@ -411,7 +416,9 @@ class Partitioner(LoggerMixin):
             out_pmtiles_files.append(out_pmtiles_file)
             Path(out_pmtiles_file).parent.mkdir(exist_ok=True, parents=True)
 
-            writer = PMTilesWriter(open(out_pmtiles_file, 'wb'))
+            output = resources.enter_context(open(out_pmtiles_file, 'wb'))
+            writer = PMTilesWriter(output)
+            resources.callback(writer.tile_f.close)
             writers.append(writer)
 
         full_header = self.get_header(all_tiles, use_lower_zoom_for_bounds=False)
@@ -440,6 +447,7 @@ class Partitioner(LoggerMixin):
             header = headers[i]
             metadata = metadatas[i]
             writer.finalize(header, metadata)
+            writer.f.close()
             file_size = Path(out_pmtiles_file).stat().st_size
             delta = file_size - self.expected_slice_sizes[i]
             self.log_info(f'Partition {slice} written to {out_pmtiles_file} with size {file_size} bytes, expected size was {self.expected_slice_sizes[i]} bytes, delta: {delta} bytes')
@@ -480,17 +488,17 @@ def partition_main(args):
         parser.error("Output PMTiles file must end with '.pmtiles'")
     to_pmtiles_prefix = args.to_pmtiles.removesuffix('.pmtiles')
 
-    reader = create_source_from_paths(args.from_source, logger=logger)
-
     size_limit_bytes = args.size_limit
     adjusted_size_limit = adjust_size_limit(size_limit_bytes, logger, args.delta_estimate)
     logger.info(f'Partitioning with size limit: {adjusted_size_limit} bytes')
 
-    partitioner = Partitioner(reader, to_pmtiles_prefix, adjusted_size_limit, logger=logger)
-
-    partitioner.partition()
-
-    partitioner.write_partitions()
+    reader = create_source_from_paths(args.from_source, logger=logger)
+    try:
+        partitioner = Partitioner(reader, to_pmtiles_prefix, adjusted_size_limit, logger=logger)
+        partitioner.partition()
+        partitioner.write_partitions()
+    finally:
+        reader.cleanup()
 
 def cli():
     partition_main(sys.argv[1:])

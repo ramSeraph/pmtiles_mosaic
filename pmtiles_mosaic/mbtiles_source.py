@@ -1,5 +1,6 @@
 import sqlite3
 import json
+from pathlib import Path
 
 import mercantile
 
@@ -9,7 +10,7 @@ from .logger import LoggerMixin
 class MBTilesSource(LoggerMixin):
     def __init__(self, fname, logger=None):
         self.logger = logger
-        self.con = sqlite3.connect(fname)
+        self.con = sqlite3.connect(Path(fname).resolve().as_uri() + '?mode=ro', uri=True)
         self._full_metadata = None
 
     def _to_xyz(self, x, y, z):

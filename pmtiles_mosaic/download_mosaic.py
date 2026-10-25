@@ -22,12 +22,12 @@ from urllib.parse import urlparse, urljoin, unquote
 import pypdl
 import aiohttp
 
-from pmtiles.reader import Reader, MmapSource, all_tiles
 from pmtiles.writer import Writer
 from pmtiles.tile import zxy_to_tileid, Compression, TileType
 
 from .logger import LoggerMixin, get_logger
 from .tiles_common import get_tile_type
+from .pmtiles_source import PMTilesSource
 
 # heavily copied from https://github.com/protomaps/PMTiles/blob/main/python/pmtiles/convert.py
 # and https://github.com/mapbox/mbutil/blob/master/mbutil/util.py
@@ -55,7 +55,7 @@ class PmtilesArchiveWriter(LoggerMixin):
                 meta_file.unlink()
 
         self.pmtiles_writer = Writer(open(self.output_file, 'wb'))
-
+        self.pmtiles_writer.tile_f.close()
         self.pmtiles_writer.tile_f = open(tile_file, 'a+b')
         self.tile_file = tile_file
 
@@ -109,8 +109,14 @@ class PmtilesArchiveWriter(LoggerMixin):
     def finalize(self, metadata, header):
         self.enhance_header(header)
         self.pmtiles_writer.finalize(header, metadata)
+        self.pmtiles_writer.f.close()
         self.tile_file.unlink()
         self.meta_file.unlink()
+
+    def close(self):
+        if self.pmtiles_writer is not None:
+            self.pmtiles_writer.f.close()
+            self.pmtiles_writer.tile_f.close()
 
 
 class MbtilesArchiveWriter(LoggerMixin):
@@ -195,6 +201,10 @@ class MbtilesArchiveWriter(LoggerMixin):
         self.enhance_metadata(metadata, header)
         self.add_metadata(metadata)
         self.finalize_mbtiles()
+
+    def close(self):
+        if self.conn is not None:
+            self.conn.close()
 
 def get_filename_from_url(url):
     url_parsed = urlparse(url)
@@ -336,14 +346,13 @@ class Merger(LoggerMixin):
     def add_pmtiles(self, pmtiles_fname):
 
         self.log_info(f'adding {pmtiles_fname} to archive')
-        with open(pmtiles_fname, "r+b") as f:
-            source = MmapSource(f)
-            reader = Reader(source)
-    
-            for zxy, tile_data in all_tiles(reader.get_bytes):
-                self.archive_writer.add_to_archive(zxy, tile_data)
-
+        source = PMTilesSource(pmtiles_fname, logger=self.logger)
+        try:
+            for tile, tile_data in source.all():
+                self.archive_writer.add_to_archive((tile.z, tile.x, tile.y), tile_data)
             self.archive_writer.commit()
+        finally:
+            source.cleanup()
 
     def prepare(self):
         if 'prepare' in self.done_stages:
@@ -354,6 +363,12 @@ class Merger(LoggerMixin):
         self.mark_as_done('prepare')
 
     def process(self):
+        try:
+            self._process()
+        finally:
+            self.archive_writer.close()
+
+    def _process(self):
         if self.force:
             self.force_cleanup()
 

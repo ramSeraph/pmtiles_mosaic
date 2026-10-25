@@ -38,7 +38,6 @@ class CheckpointTests(unittest.TestCase):
         self.writer.write_tile(last, b'other')
         output = self.root / 'rollback.pmtiles'
         self.writer.finalize(output)
-        self.writer.writer.f.flush()
         self.assertEqual(read_pmtiles(output), {first: b'same', last: b'other'})
 
     def test_size_measurement_preserves_entry_order_and_matches_final_size(self):
@@ -50,7 +49,6 @@ class CheckpointTests(unittest.TestCase):
         self.assertEqual([(e.tile_id, e.run_length) for e in self.writer.writer.tile_entries], entries)
         output = self.root / 'measured.pmtiles'
         self.writer.finalize(output)
-        self.writer.writer.f.flush()
         self.assertEqual(output.stat().st_size, size)
         self.assertEqual(read_pmtiles(output), dict.fromkeys(tiles, b'same'))
 
@@ -67,7 +65,6 @@ class CheckpointTests(unittest.TestCase):
         self.writer.write_tile(second, b'second')
         output = self.root / 'recovered.pmtiles'
         self.writer.finalize(output)
-        self.writer.writer.f.flush()
         self.assertEqual(read_pmtiles(output), {first: b'first', second: b'second'})
 
 
