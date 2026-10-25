@@ -207,12 +207,23 @@ class MbtilesArchiveWriter(LoggerMixin):
             self.conn.close()
 
 def get_filename_from_url(url):
+    if is_local(url):
+        return get_local_path(url).name
     url_parsed = urlparse(url)
     return unquote(PurePosixPath(url_parsed.path).name)
 
 def is_local(url):
     url_parsed = urlparse(url)
     return url_parsed.scheme in ('', 'file')
+
+
+def get_local_path(url):
+    parsed = urlparse(url)
+    if parsed.scheme == 'file':
+        if parsed.netloc not in ('', 'localhost'):
+            raise ValueError(f'Unsupported file URL host: {parsed.netloc}')
+        return Path(unquote(parsed.path))
+    return Path(url)
  
 
 class Merger(LoggerMixin):
@@ -226,14 +237,14 @@ class Merger(LoggerMixin):
         self.silent_pypdl_logger.addHandler(logging.NullHandler())
         self.silent_pypdl_logger.propagate = False
 
-        self.output_file = output_file
-        self.output_dir = output_file.parent
+        self.output_file = Path(output_file)
+        self.output_dir = self.output_file.parent
         self.tracker_file = self.output_file.with_suffix('.tracker.txt')
 
         self.archive_type = archive_type
         self.archive_writer = self.get_archive_writer()
 
-        self.mosaic_url = mosaic_url
+        self.mosaic_url = str(mosaic_url)
         self.mosaic_data = None
         self.mosaic_version = None
         self.done_stages = set()
@@ -241,7 +252,7 @@ class Merger(LoggerMixin):
 
     def get_file_from_url(self, url):
         if is_local(url):
-            file = Path(urlparse(url).path)
+            file = get_local_path(url)
         else:
             file = self.output_dir / get_filename_from_url(url)
 
@@ -265,8 +276,11 @@ class Merger(LoggerMixin):
     def populate_mosaic(self, mosaic_url):
         mosaic_file = self.get_mosaic_file()
 
-        if not is_local(mosaic_url) and not mosaic_file.exists():
+        if not is_local(mosaic_url) and (self.force or not mosaic_file.exists()):
             self.output_dir.mkdir(parents=True, exist_ok=True)
+            if self.force:
+                mosaic_file.unlink(missing_ok=True)
+                self._cleanup_pypdl_leftovers(mosaic_file)
             self.download_file(mosaic_url, mosaic_file)
     
         self.mosaic_data = json.loads(mosaic_file.read_text())
@@ -301,7 +315,9 @@ class Merger(LoggerMixin):
         self.done_stages.add(stage)
 
     def get_pmtiles_url(self, k):
-        if is_local(self.mosaic_url):
+        if urlparse(k).scheme:
+            return k
+        if not urlparse(self.mosaic_url).scheme:
             return str(Path(self.mosaic_url).parent / k)
 
         return urljoin(self.mosaic_url, k)
@@ -330,13 +346,6 @@ class Merger(LoggerMixin):
         if self.tracker_file.exists():
             self.log_info(f"Deleting {self.tracker_file}")
             self.tracker_file.unlink()
-
-        mosaic_file = self.get_mosaic_file()
-        if not is_local(self.mosaic_url):
-            if mosaic_file.exists():
-                self.log_info(f"Deleting {mosaic_file}")
-                mosaic_file.unlink()
-            self._cleanup_pypdl_leftovers(mosaic_file)
 
     def get_metadata_and_header(self):
         metadata = self.mosaic_data['metadata']
@@ -369,14 +378,18 @@ class Merger(LoggerMixin):
             self.archive_writer.close()
 
     def _process(self):
-        if self.force:
-            self.force_cleanup()
-
+        self.check_output_paths([self.get_mosaic_file()])
         self.populate_mosaic(self.mosaic_url)
         if self.mosaic_data.get('version', None) != 1:
             raise ValueError('Unsupported mosaic format: version must be 1')
         get_tile_type(self.mosaic_data['metadata']['format'])
         self.mosaic_version = self.mosaic_data['version']
+        self.check_output_paths([
+            self.get_pmtiles_file(self.get_pmtiles_url(key)) for key in self.mosaic_data['slices']
+        ])
+        if self.force:
+            self.force_cleanup()
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
         if self.output_file.exists() and not self.tracker_file.exists():
             raise Exception(f'Output file {self.archive_writer.output_file} already exists, and no tracker file found. Exiting to avoid overwriting.')
@@ -417,6 +430,19 @@ class Merger(LoggerMixin):
 
         metadata, header = self.get_metadata_and_header()
         self.archive_writer.finalize(metadata, header)
+
+    def check_output_paths(self, inputs):
+        destinations = [self.output_file, self.tracker_file]
+        if self.archive_type == 'pmtiles':
+            destinations.extend([
+                self.output_file.with_suffix('.tiles.bin'), self.output_file.with_suffix('.meta.pkl'),
+            ])
+        for source in inputs:
+            for destination in destinations:
+                if destination.resolve() == source.resolve() or (
+                    destination.exists() and source.exists() and destination.samefile(source)
+                ):
+                    raise ValueError(f'Output or checkpoint path overlaps an input: {source}')
 
     def cleanup(self):
         if self.tracker_file.exists():

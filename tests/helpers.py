@@ -1,11 +1,12 @@
 import logging
+import json
 import sqlite3
 from pathlib import Path
 
 from pmtiles.writer import Writer
 from pmtiles.tile import zxy_to_tileid
 
-from pmtiles_mosaic.partition import get_header, get_header_base
+from pmtiles_mosaic.partition import HEADER_EXPORT_KEYS, SLICE_HEADER_EXPORT_KEYS, convert_header, get_header, get_header_base
 from pmtiles_mosaic.pmtiles_source import PMTilesSource
 from pmtiles_mosaic.tiles_common import MissingTileError
 
@@ -88,3 +89,23 @@ def read_pmtiles(path):
         return dict(source.all())
     finally:
         source.cleanup()
+
+
+def write_mosaic(root, slices, metadata=None):
+    metadata = metadata if metadata is not None else {'format': 'png'}
+    header_base = get_header_base(metadata)
+    entries = {}
+    all_tiles = {}
+    for index, tiles in enumerate(slices):
+        name = f'part{index}.pmtiles'
+        write_pmtiles(root / name, tiles, metadata)
+        entries[name] = {'header': convert_header(get_header(tiles, header_base, True), SLICE_HEADER_EXPORT_KEYS)}
+        all_tiles.update(tiles)
+    document = {
+        'version': 1, 'metadata': metadata,
+        'header': convert_header(get_header(all_tiles, header_base), HEADER_EXPORT_KEYS),
+        'slices': entries,
+    }
+    path = root / 'map.mosaic.json'
+    path.write_text(json.dumps(document))
+    return path
