@@ -16,6 +16,9 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/@ramseraph/pmtiles-mosaic
     defaults:
       run:
         working-directory: js

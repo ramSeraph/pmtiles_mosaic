@@ -291,8 +291,8 @@ index's advantage.
 To publish, set the intended version in `package.json` and `package-lock.json`,
 run the checks above, commit the changes, and push a matching `js-v<version>` tag
 (for example, `js-v0.1.0`). The `npm-publish.yml` workflow verifies the version,
-runs the tests, and publishes the public package with provenance using the
-repository's `NPM_TOKEN` secret. Python releases use separate `v<version>` tags.
+runs the tests, and publishes the public package with provenance through the
+`npm` environment using `NPM_TOKEN`. Python releases use separate `v<version>` tags.
 
 For a manual release, run `npm publish` from `js/` while authenticated to npm.
 The `prepack` hook builds TypeScript into `dist/`, including declarations and
