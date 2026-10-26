@@ -3,7 +3,7 @@ import type { SliceIndexFactory } from "../types.js";
 
 /**
  * Optional plugin owning both Flatbush construction and lookup. Import from
- * pmtiles-mosaic/flatbush and pass as createIndex; install flatbush separately.
+ * @ramseraph/pmtiles-mosaic/flatbush and pass as createIndex; install flatbush separately.
  */
 export const createFlatbushIndex: SliceIndexFactory = (slices) => {
   if (slices.length === 0) return { search: () => [] };

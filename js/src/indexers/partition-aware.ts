@@ -20,7 +20,7 @@ interface Cut {
 
 /**
  * Optional partition-aware index for recursive, axis-aligned slice bounds.
- * Import from pmtiles-mosaic/partition-aware and pass as createIndex.
+ * Import from @ramseraph/pmtiles-mosaic/partition-aware and pass as createIndex.
  *
  * Reconstructs x/y cuts from the slices at each queried zoom. Adjacent bounds
  * may touch; searches include both sides of a touched boundary. Overlapping or

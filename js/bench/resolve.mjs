@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { performance } from "node:perf_hooks";
-import { MosaicResolver, tileBoundsE7 } from "pmtiles-mosaic";
-import { createLinearIndex } from "pmtiles-mosaic/linear";
-import { createFlatbushIndex } from "pmtiles-mosaic/flatbush";
-import { createPartitionAwareIndex } from "pmtiles-mosaic/partition-aware";
+import { MosaicResolver, tileBoundsE7 } from "@ramseraph/pmtiles-mosaic";
+import { createLinearIndex } from "@ramseraph/pmtiles-mosaic/linear";
+import { createFlatbushIndex } from "@ramseraph/pmtiles-mosaic/flatbush";
+import { createPartitionAwareIndex } from "@ramseraph/pmtiles-mosaic/partition-aware";
 import { random } from "../test/helpers.mjs";
 import { partitionedMosaic } from "../test/partition-helpers.mjs";
 

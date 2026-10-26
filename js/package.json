@@ -1,5 +1,5 @@
 {
-  "name": "pmtiles-mosaic",
+  "name": "@ramseraph/pmtiles-mosaic",
   "version": "0.1.0",
   "description": "Resolve and read tiles from PMTiles mosaics with pluggable indexes and data access",
   "type": "module",
@@ -25,6 +25,7 @@
     "./package.json": "./package.json"
   },
   "files": ["dist", "src", "LICENSE"],
+  "publishConfig": { "access": "public" },
   "sideEffects": false,
   "engines": {
     "node": ">=20"

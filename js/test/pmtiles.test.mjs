@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import test from "node:test";
-import { MosaicClient, createPMTilesReader, PMTilesMosaic } from "pmtiles-mosaic";
-import { createFlatbushIndex } from "pmtiles-mosaic/flatbush";
+import { MosaicClient, createPMTilesReader, PMTilesMosaic } from "@ramseraph/pmtiles-mosaic";
+import { createFlatbushIndex } from "@ramseraph/pmtiles-mosaic/flatbush";
 import { mosaic, slice } from "./helpers.mjs";
 
 const bytes = readFileSync(new URL("fixtures/sample.pmtiles", import.meta.url));

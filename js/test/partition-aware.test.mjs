@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { MosaicResolver } from "pmtiles-mosaic";
-import { createPartitionAwareIndex } from "pmtiles-mosaic/partition-aware";
+import { MosaicResolver } from "@ramseraph/pmtiles-mosaic";
+import { createPartitionAwareIndex } from "@ramseraph/pmtiles-mosaic/partition-aware";
 import { mosaic, random, slice } from "./helpers.mjs";
 import { partitionedMosaic } from "./partition-helpers.mjs";
 

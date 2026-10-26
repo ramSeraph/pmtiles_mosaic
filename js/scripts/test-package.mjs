@@ -24,7 +24,7 @@ try {
   writeFileSync(join(scratch, "package.json"), JSON.stringify({ private: true, type: "module" }));
   // Use the installed peer so this check does not need registry metadata offline.
   run("npm", ["install", "--offline", "--ignore-scripts", "--omit=optional", "--no-audit", "--no-fund", "--package-lock=false", join(scratch, archive.filename), join(root, "node_modules/pmtiles")]);
-  const installed = JSON.parse(readFileSync(join(scratch, "node_modules/pmtiles-mosaic/package.json"), "utf8"));
+  const installed = JSON.parse(readFileSync(join(scratch, "node_modules/@ramseraph/pmtiles-mosaic/package.json"), "utf8"));
   assert.equal(installed.dependencies, undefined);
   assert(installed.peerDependencies.pmtiles);
   assert.notEqual(installed.peerDependenciesMeta.pmtiles?.optional, true);
@@ -32,9 +32,9 @@ try {
   assert.equal(installed.exports["./pmtiles"], undefined);
   writeFileSync(join(scratch, "consumer.mjs"), `
     import assert from 'node:assert/strict';
-    import { MosaicResolver, MosaicClient, createPMTilesReader, PMTilesMosaic } from 'pmtiles-mosaic';
-    import { createPartitionAwareIndex } from 'pmtiles-mosaic/partition-aware';
-    import { createLinearIndex } from 'pmtiles-mosaic/linear';
+    import { MosaicResolver, MosaicClient, createPMTilesReader, PMTilesMosaic } from '@ramseraph/pmtiles-mosaic';
+    import { createPartitionAwareIndex } from '@ramseraph/pmtiles-mosaic/partition-aware';
+    import { createLinearIndex } from '@ramseraph/pmtiles-mosaic/linear';
     import { Compression, TileType } from 'pmtiles';
     for (const dependency of ['flatbush', 'flatqueue']) {
       await assert.rejects(import(dependency), { code: 'ERR_MODULE_NOT_FOUND' });
@@ -63,9 +63,9 @@ try {
   `);
   run(process.execPath, ["consumer.mjs"]);
   writeFileSync(join(scratch, "consumer.ts"), `
-    import { MosaicClient, MosaicResolver, PMTilesMosaic, createPMTilesReader, type PMTilesMosaicOptions, type MosaicHeader, type SliceIndexFactory } from 'pmtiles-mosaic';
-    import { createPartitionAwareIndex } from 'pmtiles-mosaic/partition-aware';
-    import { createLinearIndex } from 'pmtiles-mosaic/linear';
+    import { MosaicClient, MosaicResolver, PMTilesMosaic, createPMTilesReader, type PMTilesMosaicOptions, type MosaicHeader, type SliceIndexFactory } from '@ramseraph/pmtiles-mosaic';
+    import { createPartitionAwareIndex } from '@ramseraph/pmtiles-mosaic/partition-aware';
+    import { createLinearIndex } from '@ramseraph/pmtiles-mosaic/linear';
     import { Compression, TileType } from 'pmtiles';
     declare const header: MosaicHeader;
     const tileType: TileType = header.tile_type;

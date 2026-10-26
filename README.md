@@ -163,13 +163,13 @@ and update `metadata.json` before reading or partitioning them.
 ## Client Code
 
 The [TypeScript library in `js/`](./js/README.md), packaged for npm as
-`pmtiles-mosaic`, resolves and reads tiles from version 1 mosaics. It uses PMTiles
+`@ramseraph/pmtiles-mosaic`, resolves and reads tiles from version 1 mosaics. It uses PMTiles
 as a peer dependency and accepts caller-provided manifest loaders, tile readers,
 and index plugins. The main entry point provides a replaceable PMTiles reader;
-`pmtiles-mosaic/flatbush` provides an optional Flatbush index.
+`@ramseraph/pmtiles-mosaic/flatbush` provides an optional Flatbush index.
 
 ```ts
-import { PMTilesMosaic } from "pmtiles-mosaic";
+import { PMTilesMosaic } from "@ramseraph/pmtiles-mosaic";
 
 const mosaic = new PMTilesMosaic("https://example.com/map.mosaic.json");
 const tile = await mosaic.getTile(8, 182, 111);

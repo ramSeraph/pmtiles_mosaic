@@ -1,4 +1,4 @@
-# pmtiles-mosaic
+# @ramseraph/pmtiles-mosaic
 
 A TypeScript library for resolving and reading tiles from [PMTiles mosaics](https://github.com/ramSeraph/pmtiles_mosaic/blob/main/spec.md).
 Published as an ES module with TypeScript declarations. Works in modern browsers,
@@ -12,10 +12,10 @@ separate entry point.
 
 | Entry point | Provides | Peer dependencies |
 | --- | --- | --- |
-| `pmtiles-mosaic` | `MosaicResolver`, `MosaicClient`, `PMTilesMosaic`, `createPMTilesReader`, types, linear index | `pmtiles` |
-| `pmtiles-mosaic/linear` | `createLinearIndex` (the default) | `pmtiles` |
-| `pmtiles-mosaic/flatbush` | `createFlatbushIndex` | `pmtiles`, `flatbush` |
-| `pmtiles-mosaic/partition-aware` | `createPartitionAwareIndex` | `pmtiles` |
+| `@ramseraph/pmtiles-mosaic` | `MosaicResolver`, `MosaicClient`, `PMTilesMosaic`, `createPMTilesReader`, types, linear index | `pmtiles` |
+| `@ramseraph/pmtiles-mosaic/linear` | `createLinearIndex` (the default) | `pmtiles` |
+| `@ramseraph/pmtiles-mosaic/flatbush` | `createFlatbushIndex` | `pmtiles`, `flatbush` |
+| `@ramseraph/pmtiles-mosaic/partition-aware` | `createPartitionAwareIndex` | `pmtiles` |
 
 Omitting `createIndex` uses the linear index. Each index has its own entry point;
 the main entry point does not import the Flatbush or partition-aware implementations.
@@ -29,11 +29,11 @@ Compression support during tile reads depends on the reader's decompressor.
 ## Read tiles with PMTiles
 
 ```sh
-npm install pmtiles-mosaic pmtiles
+npm install @ramseraph/pmtiles-mosaic pmtiles
 ```
 
 ```ts
-import { PMTilesMosaic } from "pmtiles-mosaic";
+import { PMTilesMosaic } from "@ramseraph/pmtiles-mosaic";
 
 const mosaic = new PMTilesMosaic("https://example.com/maps/map.mosaic.json");
 const tile = await mosaic.getTile(8, 182, 111);
@@ -63,11 +63,11 @@ metadata such as generator options and tile statistics stays available through
 ## Resolve without any I/O
 
 ```sh
-npm install pmtiles-mosaic pmtiles
+npm install @ramseraph/pmtiles-mosaic pmtiles
 ```
 
 ```ts
-import { MosaicResolver } from "pmtiles-mosaic";
+import { MosaicResolver } from "@ramseraph/pmtiles-mosaic";
 
 // Load/parse the JSON however your application needs to.
 const document = await loadMyMosaic();
@@ -92,7 +92,7 @@ Relative URL bases such as `/maps/map.mosaic.json` are also supported.
 ## Supply both the manifest loader and tile reader
 
 ```ts
-import { MosaicClient } from "pmtiles-mosaic";
+import { MosaicClient } from "@ramseraph/pmtiles-mosaic";
 
 const client = new MosaicClient({
   // These storage functions belong to your application.
@@ -114,7 +114,7 @@ To keep the PMTiles decoder while supplying your own storage, use the reader
 adapter with a [PMTiles `Source`](https://pmtiles.io/typedoc/interfaces/Source.html):
 
 ```ts
-import { MosaicClient, createPMTilesReader } from "pmtiles-mosaic";
+import { MosaicClient, createPMTilesReader } from "@ramseraph/pmtiles-mosaic";
 
 const client = new MosaicClient({
   loadMosaic: (signal) => storage.readJson("maps/map.mosaic.json", signal),
@@ -141,7 +141,7 @@ replace manifest fetching and range fetching independently.
 You can also replace tile reading entirely on the convenience client:
 
 ```ts
-import { PMTilesMosaic } from "pmtiles-mosaic";
+import { PMTilesMosaic } from "@ramseraph/pmtiles-mosaic";
 
 const mosaic = new PMTilesMosaic("https://example.com/maps/map.mosaic.json", {
   readTile: (slice, z, x, y, signal) =>
@@ -160,8 +160,8 @@ npm install flatbush
 ```
 
 ```ts
-import { MosaicResolver } from "pmtiles-mosaic";
-import { createFlatbushIndex } from "pmtiles-mosaic/flatbush";
+import { MosaicResolver } from "@ramseraph/pmtiles-mosaic";
+import { createFlatbushIndex } from "@ramseraph/pmtiles-mosaic/flatbush";
 
 const resolver = new MosaicResolver(document, {
   createIndex: createFlatbushIndex,
@@ -172,8 +172,8 @@ const candidates = resolver.resolve(8, 182, 111);
 The same option works with either client:
 
 ```ts
-import { PMTilesMosaic } from "pmtiles-mosaic";
-import { createFlatbushIndex } from "pmtiles-mosaic/flatbush";
+import { PMTilesMosaic } from "@ramseraph/pmtiles-mosaic";
+import { createFlatbushIndex } from "@ramseraph/pmtiles-mosaic/flatbush";
 
 const mosaic = new PMTilesMosaic("https://example.com/maps/map.mosaic.json", {
   createIndex: createFlatbushIndex,
@@ -192,8 +192,8 @@ For mosaics produced by the recursive Python partitioner, a separate optional
 index reconstructs the x/y partition tree from the existing slice bounds:
 
 ```ts
-import { PMTilesMosaic } from "pmtiles-mosaic";
-import { createPartitionAwareIndex } from "pmtiles-mosaic/partition-aware";
+import { PMTilesMosaic } from "@ramseraph/pmtiles-mosaic";
+import { createPartitionAwareIndex } from "@ramseraph/pmtiles-mosaic/partition-aware";
 
 const mosaic = new PMTilesMosaic("https://example.com/map.mosaic.json", {
   createIndex: createPartitionAwareIndex,
@@ -222,7 +222,7 @@ returns its search implementation. Both construction and lookup belong to the
 plugin:
 
 ```ts
-import type { SliceIndexFactory } from "pmtiles-mosaic";
+import type { SliceIndexFactory } from "@ramseraph/pmtiles-mosaic";
 
 const createMyIndex: SliceIndexFactory = (slices, zoom) => {
   const index = buildMySpatialIndex(slices, zoom);
@@ -289,10 +289,14 @@ own slice distribution and query volume; large overlap can erase the spatial
 index's advantage.
 
 To publish, set the intended version in `package.json` and `package-lock.json`,
-run the checks above, then run `npm publish` from `js/`. The `prepack` hook builds
-TypeScript into `dist/`, including declarations and source maps. Package exports
-keep the integrations separate. Publishing this npm package is
-independent of the repository's Python release workflow.
+run the checks above, commit the changes, and push a matching `js-v<version>` tag
+(for example, `js-v0.1.0`). The `npm-publish.yml` workflow verifies the version,
+runs the tests, and publishes the public package with provenance using the
+repository's `NPM_TOKEN` secret. Python releases use separate `v<version>` tags.
+
+For a manual release, run `npm publish` from `js/` while authenticated to npm.
+The `prepack` hook builds TypeScript into `dist/`, including declarations and
+source maps. Package exports keep the integrations separate.
 
 ## License
 

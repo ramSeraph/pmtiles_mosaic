@@ -1,8 +1,8 @@
-import { MosaicClient, MosaicResolver, createPMTilesReader, PMTilesMosaic, type SliceIndexFactory, type MosaicDocument, type TileFormat } from "pmtiles-mosaic";
+import { MosaicClient, MosaicResolver, createPMTilesReader, PMTilesMosaic, type SliceIndexFactory, type MosaicDocument, type TileFormat } from "@ramseraph/pmtiles-mosaic";
 import { Compression, TileType } from "pmtiles";
-import { createFlatbushIndex } from "pmtiles-mosaic/flatbush";
-import { createPartitionAwareIndex } from "pmtiles-mosaic/partition-aware";
-import { createLinearIndex } from "pmtiles-mosaic/linear";
+import { createFlatbushIndex } from "@ramseraph/pmtiles-mosaic/flatbush";
+import { createPartitionAwareIndex } from "@ramseraph/pmtiles-mosaic/partition-aware";
+import { createLinearIndex } from "@ramseraph/pmtiles-mosaic/linear";
 
 declare const document: MosaicDocument;
 const tileType: TileType = document.header.tile_type;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { MosaicClient } from "pmtiles-mosaic";
+import { MosaicClient } from "@ramseraph/pmtiles-mosaic";
 import { mosaic, slice } from "./helpers.mjs";
 
 test("client metadata methods share the tile reader's successful manifest snapshot", async () => {

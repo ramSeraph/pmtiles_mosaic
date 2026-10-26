@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { MosaicResolver, parseMosaic, tileBoundsE7, TILE_FORMATS } from "pmtiles-mosaic";
+import { MosaicResolver, parseMosaic, tileBoundsE7, TILE_FORMATS } from "@ramseraph/pmtiles-mosaic";
 import { Compression, TileType } from "pmtiles";
-import { createFlatbushIndex } from "pmtiles-mosaic/flatbush";
+import { createFlatbushIndex } from "@ramseraph/pmtiles-mosaic/flatbush";
 import { mosaic, random, slice } from "./helpers.mjs";
 
 const keys = (slices) => slices.map(({ key }) => key);

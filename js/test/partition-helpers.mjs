@@ -1,4 +1,4 @@
-import { tileBoundsE7 } from "pmtiles-mosaic";
+import { tileBoundsE7 } from "@ramseraph/pmtiles-mosaic";
 import { mosaic, random, slice } from "./helpers.mjs";
 
 /** Uneven, tile-aligned recursive x/y cuts, with shuffled manifest order. */
