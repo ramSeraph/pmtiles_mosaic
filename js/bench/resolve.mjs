@@ -1,66 +1,100 @@
 import assert from "node:assert/strict";
+import { writeFileSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import { MosaicResolver, tileBoundsE7 } from "pmtiles-mosaic";
+import { createLinearIndex } from "pmtiles-mosaic/linear";
 import { createFlatbushIndex } from "pmtiles-mosaic/flatbush";
-import { mosaic, random, slice } from "../test/helpers.mjs";
+import { createPartitionAwareIndex } from "pmtiles-mosaic/partition-aware";
+import { random } from "../test/helpers.mjs";
+import { partitionedMosaic } from "../test/partition-helpers.mjs";
 
-// Reproducible full-resolver timings, including ordering and exact bounds checks.
-// Construction includes manifest validation, snapshotting, zoom grouping, and the
-// first lazy index build. The overlap case illustrates why there is no universal threshold.
-const counts = [8, 32, 128, 512, 2048];
+// Counts are slices at ONE zoom. Recursive cases mix uneven x/y subdivisions.
+// Lookup includes tile bounds, ordering and filtering. Factory timing isolates
+// index construction from the shared manifest validation and snapshotting.
+const counts = [8, 16, 32, 100, 250, 500, 1000];
+const factories = { linear: createLinearIndex, flatbush: createFlatbushIndex, "partition-aware": createPartitionAwareIndex };
+const names = Object.keys(factories);
 const rand = random();
-const queries = Array.from({ length: 2048 }, () => [12, Math.floor(rand() * 4096), Math.floor(rand() * 4096)]);
-const median = (values) => values.sort((a, b) => a - b)[Math.floor(values.length / 2)];
+const queries = Array.from({ length: 4096 }, () => [12, Math.floor(rand() * 4096), Math.floor(rand() * 4096)]);
+const firstBounds = tileBoundsE7(...queries[0]);
+const rounds = 7;
+const median = (values) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
 let checksum = 0;
 
-function makeDocument(count, layout) {
-  const entries = {};
+function queryBatch(resolver, count) {
+  const start = performance.now();
+  let found = 0;
   for (let i = 0; i < count; i++) {
-    let bounds;
-    if (layout === "stripes") {
-      bounds = [Math.trunc(-1800000000 + i / count * 3600000000), -850511287,
-        Math.trunc(-1800000000 + (i + 1) / count * 3600000000), 850511287];
-    } else if (layout === "grid") {
-      const z = Math.ceil(Math.log2(Math.sqrt(count)));
-      bounds = tileBoundsE7(z, i % (2 ** z), Math.floor(i / 2 ** z));
-    } else {
-      bounds = [-1800000000, -850511287, 1800000000, 850511287];
+    const q = queries[i % queries.length];
+    found += resolver.resolve(q[0], q[1], q[2]).length;
+  }
+  const elapsed = performance.now() - start;
+  checksum += found;
+  return elapsed;
+}
+
+function buildBatch(factory, slices, count) {
+  let index;
+  const start = performance.now();
+  for (let i = 0; i < count; i++) index = factory(slices, 12);
+  const elapsed = performance.now() - start;
+  checksum += index.search(firstBounds).length;
+  return elapsed;
+}
+
+function measure(document) {
+  const resolvers = Object.fromEntries(names.map(name => [name, new MosaicResolver(document, { createIndex: factories[name] })]));
+  for (const query of queries) {
+    const expected = resolvers.linear.resolve(...query).map(s => s.key);
+    for (const name of ["flatbush", "partition-aware"]) {
+      assert.deepEqual(resolvers[name].resolve(...query).map(s => s.key), expected);
     }
-    entries[`part-${i}.pmtiles`] = slice(bounds, 12, 12);
   }
-  return mosaic(entries);
+  const slices = resolvers.linear.slices;
+  const queryCounts = {}, buildCounts = {};
+  const queryTimes = {}, buildTimes = {};
+  for (const name of names) {
+    queryBatch(resolvers[name], 32768);
+    buildBatch(factories[name], slices, 128);
+    const qPilot = queryBatch(resolvers[name], 8192);
+    const bPilot = buildBatch(factories[name], slices, 128);
+    queryCounts[name] = Math.max(4096, Math.min(524288, Math.ceil(20 / qPilot) * 8192));
+    buildCounts[name] = Math.max(1, Math.min(65536, Math.ceil(10 / bPilot * 128)));
+    queryTimes[name] = [];
+    buildTimes[name] = [];
+  }
+  for (let i = 0; i < rounds; i++) {
+    const order = [...names.slice(i % names.length), ...names.slice(0, i % names.length)];
+    for (const name of order) {
+      queryTimes[name].push(queryBatch(resolvers[name], queryCounts[name]) * 1000 / queryCounts[name]);
+      buildTimes[name].push(buildBatch(factories[name], slices, buildCounts[name]) * 1000 / buildCounts[name]);
+    }
+  }
+  const queryUs = Object.fromEntries(names.map(name => [name, median(queryTimes[name])]));
+  const buildUs = Object.fromEntries(names.map(name => [name, median(buildTimes[name])]));
+  const amortize = (against) => queryUs["partition-aware"] < queryUs[against]
+    ? Math.max(1, Math.ceil((buildUs["partition-aware"] - buildUs[against]) / (queryUs[against] - queryUs["partition-aware"])))
+    : null;
+  return { queryUs, buildUs, queryTimes, buildTimes, queryCounts, buildCounts,
+    breakEvenVsLinear: amortize("linear"), breakEvenVsFlatbush: amortize("flatbush") };
 }
 
-function measure(document, createIndex) {
-  const construction = [];
-  let resolver;
-  for (let i = 0; i < 7; i++) {
-    const start = performance.now();
-    resolver = new MosaicResolver(document, createIndex ? { createIndex } : {});
-    resolver.resolve(...queries[0]);
-    construction.push(performance.now() - start);
-  }
-  for (const query of queries) checksum += resolver.resolve(...query).length;
-  const times = [];
-  for (let i = 0; i < 5; i++) {
-    const start = performance.now();
-    for (const query of queries) checksum += resolver.resolve(...query).length;
-    times.push((performance.now() - start) * 1000 / queries.length);
-  }
-  return { resolver, build: median(construction), query: median(times) };
-}
-
-console.log(`${process.version} ${process.platform}/${process.arch}; 2,048 seeded z12 queries, median of 5 runs`);
-console.log("layout   slices  linear build ms  flatbush build ms  linear us/query  flatbush us/query  speedup");
-for (const layout of ["stripes", "grid", "overlap"]) {
+console.log(`${process.version} ${process.platform}/${process.arch}; 4,096 seeded z12 queries; median of ${rounds} alternating runs`);
+console.log("layout     slices | lookup us: linear flatbush partition-aware | build us: linear flatbush partition-aware | partition-aware vs flatbush");
+const rows = [];
+for (const layout of ["stripes", "recursive"]) {
   for (const count of counts) {
-    const document = makeDocument(count, layout);
-    const linear = measure(document);
-    const indexed = measure(document, createFlatbushIndex);
-    for (const query of queries.slice(0, 100)) {
-      assert.deepEqual(indexed.resolver.resolve(...query).map((s) => s.key), linear.resolver.resolve(...query).map((s) => s.key));
-    }
-    console.log(`${layout.padEnd(8)} ${String(count).padStart(6)} ${linear.build.toFixed(3).padStart(16)} ${indexed.build.toFixed(3).padStart(18)} ${linear.query.toFixed(3).padStart(16)} ${indexed.query.toFixed(3).padStart(18)} ${(linear.query / indexed.query).toFixed(2).padStart(7)}x`);
+    const row = { layout, count, ...measure(partitionedMosaic(count, layout)) };
+    rows.push(row);
+    const q = names.map(name => row.queryUs[name].toFixed(3).padStart(8)).join(" ");
+    const b = names.map(name => row.buildUs[name].toFixed(2).padStart(8)).join(" ");
+    console.log(`${layout.padEnd(10)} ${String(count).padStart(6)} | ${q} | ${b} | ${(row.queryUs.flatbush / row.queryUs["partition-aware"]).toFixed(2)}x`);
   }
 }
 console.log(`checksum: ${checksum}`);
+const jsonIndex = process.argv.indexOf("--json");
+if (jsonIndex !== -1) {
+  const path = process.argv[jsonIndex + 1];
+  if (!path) throw new Error("--json requires an output path");
+  writeFileSync(path, JSON.stringify({ runtime: process.version, platform: `${process.platform}/${process.arch}`, rounds, rows }, null, 2));
+}

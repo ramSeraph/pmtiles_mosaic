@@ -13,7 +13,12 @@ separate entry point.
 | Entry point | Provides | Peer dependencies |
 | --- | --- | --- |
 | `pmtiles-mosaic` | `MosaicResolver`, `MosaicClient`, `PMTilesMosaic`, `createPMTilesReader`, types, linear index | `pmtiles` |
+| `pmtiles-mosaic/linear` | `createLinearIndex` (the default) | `pmtiles` |
 | `pmtiles-mosaic/flatbush` | `createFlatbushIndex` | `pmtiles`, `flatbush` |
+| `pmtiles-mosaic/partition-aware` | `createPartitionAwareIndex` | `pmtiles` |
+
+Omitting `createIndex` uses the linear index. Each index has its own entry point;
+the main entry point does not import the Flatbush or partition-aware implementations.
 
 `MosaicHeader.tile_type` and `tile_compression` use PMTiles' `TileType` and
 `Compression` enums directly. Supported format strings come from `tileTypeExt()`,
@@ -38,9 +43,8 @@ if (tile) {
   // Render, decode, or serve the bytes.
 }
 
-const resolver = await mosaic.getResolver();
-console.log(resolver.mimeType);
-const tileJson = resolver.getTileJson([
+console.log(await mosaic.getMimeType());
+const tileJson = await mosaic.getTileJson([
   "https://my-server.example/tiles/{z}/{x}/{y}.mvt",
 ]);
 ```
@@ -50,6 +54,11 @@ to its URL, and uses `pmtiles` for range requests and decompression. `getTile`
 returns the PMTiles `RangeResponse` unchanged, including its `data: ArrayBuffer`
 and any cache headers, or `undefined` when the tile is absent. An optional fourth
 argument is an `AbortSignal`.
+
+`getMimeType(signal?)` and `getTileJson(tiles, signal?)` use the same cached
+manifest as tile reads. TileJSON contains the standard serving fields; archive
+metadata such as generator options and tile statistics stays available through
+`(await mosaic.getResolver()).document.metadata`.
 
 ## Resolve without any I/O
 
@@ -176,6 +185,35 @@ the mosaic's E7 coordinates in an `Int32Array`. It also implements lookup agains
 that index. Unqueried zooms do not allocate indexes. There is **no automatic slice
 count threshold**: callers choose their index. Importing the main entry point
 neither loads nor requires Flatbush.
+
+## Index recursive partitions
+
+For mosaics produced by the recursive Python partitioner, a separate optional
+index reconstructs the x/y partition tree from the existing slice bounds:
+
+```ts
+import { PMTilesMosaic } from "pmtiles-mosaic";
+import { createPartitionAwareIndex } from "pmtiles-mosaic/partition-aware";
+
+const mosaic = new PMTilesMosaic("https://example.com/map.mosaic.json", {
+  createIndex: createPartitionAwareIndex,
+});
+```
+
+This needs no additional dependency or manifest fields. Construction happens
+once per queried zoom, using only the slices covering that zoom. It supports
+recursive x and y subdivisions, gaps, and touching boundaries. Tile lookup still
+checks the candidate archives for missing tiles.
+
+The bounds must form recursively separable rectangles: each group can be divided
+along x or y without crossing any slice's interior. If that assumption does not
+hold, index construction throws; there is no automatic fallback. Omit
+`createIndex` to use the linear index, or choose another plugin.
+
+`npm run bench` compares linear, Flatbush, and partition-aware indexes for 8–1,000 slices
+at one zoom, using both vertical strips and uneven recursive x/y partitions.
+It reports index construction and full resolver lookup times separately. Use
+`npm run bench -- --json /tmp/mosaic-benchmark.json` to save the measurements.
 
 ## Write an index plugin
 

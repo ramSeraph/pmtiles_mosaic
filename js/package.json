@@ -10,9 +10,17 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./linear": {
+      "types": "./dist/linear.d.ts",
+      "import": "./dist/linear.js"
+    },
     "./flatbush": {
       "types": "./dist/flatbush.d.ts",
       "import": "./dist/flatbush.js"
+    },
+    "./partition-aware": {
+      "types": "./dist/partition-aware.d.ts",
+      "import": "./dist/partition-aware.js"
     },
     "./package.json": "./package.json"
   },

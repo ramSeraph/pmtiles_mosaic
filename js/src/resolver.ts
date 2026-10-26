@@ -1,5 +1,6 @@
 import { TileType } from "pmtiles";
 import { intersects, tileBoundsE7 } from "./geometry.js";
+import { createLinearIndex } from "./linear.js";
 import { parseMosaic } from "./validate.js";
 import type {
   MosaicDocument, ResolvedSlice, ResolverOptions, SliceIndex, SliceIndexFactory, TileJSON,
@@ -14,17 +15,6 @@ const MIME_TYPES: Readonly<Record<TileType, string>> = {
   [TileType.Avif]: "image/avif",
   [TileType.Mlt]: "application/vnd.maplibre-vector-tile",
 };
-
-/** Default plugin: no index construction. */
-export const createLinearIndex: SliceIndexFactory = (slices) => ({
-  search(bounds) {
-    const found: number[] = [];
-    for (let i = 0; i < slices.length; i++) {
-      if (intersects(slices[i]!.header, bounds)) found.push(i);
-    }
-    return found;
-  },
-});
 
 interface ZoomState {
   readonly slices: readonly ResolvedSlice[];
@@ -95,11 +85,18 @@ export class MosaicResolver {
     return MIME_TYPES[this.document.header.tile_type] ?? MIME_TYPES[TileType.Unknown];
   }
 
-  /** Build TileJSON using caller-provided URL templates for serving tiles. */
+  /**
+   * Build TileJSON using caller-provided URL templates and selected serving
+   * metadata. Complete archive metadata remains available on document.metadata.
+   */
   getTileJson(tiles: readonly string[]): TileJSON {
     const { header: h, metadata } = this.document;
     return {
-      ...metadata,
+      ...(metadata.name !== undefined && { name: metadata.name }),
+      ...(metadata.description !== undefined && { description: metadata.description }),
+      ...(metadata.attribution !== undefined && { attribution: metadata.attribution }),
+      ...(metadata.version !== undefined && { version: metadata.version }),
+      ...(metadata.vector_layers !== undefined && { vector_layers: metadata.vector_layers }),
       tilejson: "3.0.0",
       scheme: "xyz",
       tiles: [...tiles],

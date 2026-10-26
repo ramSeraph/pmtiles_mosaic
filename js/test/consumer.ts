@@ -1,6 +1,8 @@
 import { MosaicClient, MosaicResolver, createPMTilesReader, PMTilesMosaic, type SliceIndexFactory, type MosaicDocument, type TileFormat } from "pmtiles-mosaic";
 import { Compression, TileType } from "pmtiles";
 import { createFlatbushIndex } from "pmtiles-mosaic/flatbush";
+import { createPartitionAwareIndex } from "pmtiles-mosaic/partition-aware";
+import { createLinearIndex } from "pmtiles-mosaic/linear";
 
 declare const document: MosaicDocument;
 const tileType: TileType = document.header.tile_type;
@@ -20,12 +22,17 @@ const custom: SliceIndexFactory = (slices, zoom) => ({
 });
 const resolver = new MosaicResolver(document, { createIndex: custom });
 const indexed = new MosaicResolver(document, { createIndex: createFlatbushIndex });
+const partitioned = new MosaicResolver(document, { createIndex: createPartitionAwareIndex });
+const linear = new MosaicResolver(document, { createIndex: createLinearIndex });
 const key: string | undefined = indexed.resolve(0, 0, 0)[0]?.key;
 const client = new MosaicClient({
   loadMosaic: async () => document,
   readTile: async () => ({ payload: new Uint8Array(), tag: "custom" }),
 });
 const value: Uint8Array | undefined = (await client.getTile(0, 0, 0))?.payload;
+const mime: string = await client.getMimeType();
+const tileJson = await client.getTileJson(["/tiles/{z}/{x}/{y}.mvt"]);
+const urls: readonly string[] = tileJson.tiles;
 const pmtiles = new MosaicClient({ loadMosaic: async () => document, readTile: createPMTilesReader() });
 const bytes: ArrayBuffer | undefined = (await pmtiles.getTile(0, 0, 0))?.data;
 const simple = new PMTilesMosaic("https://example.org/map.mosaic.json", {
@@ -33,4 +40,4 @@ const simple = new PMTilesMosaic("https://example.org/map.mosaic.json", {
   loadMosaic: async () => document,
 });
 const simpleBytes: ArrayBuffer | undefined = (await simple.getTile(0, 0, 0))?.data;
-void [resolver, key, value, bytes, simpleBytes, tileType, compression, formats, invalidFormat, removedJpegAlias, removedPbfAlias, invalidType];
+void [resolver, partitioned, linear, key, value, mime, urls, bytes, simpleBytes, tileType, compression, formats, invalidFormat, removedJpegAlias, removedPbfAlias, invalidType];

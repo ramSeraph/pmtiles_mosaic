@@ -27,6 +27,28 @@ test("reads the specification's example, resolves URLs and produces TileJSON", (
   assert.deepEqual(json.tiles, ["https://example.org/tiles/{z}/{x}/{y}.mvt"]);
 });
 
+test("TileJSON selects serving metadata and leaves archive details on the document", () => {
+  const document = mosaic();
+  Object.assign(document.metadata, {
+    description: "Example map", version: "1", vector_layers: [{ id: "roads" }],
+    generator: "tippecanoe", generator_options: "--many-options",
+    tilestats: { layers: [{ attributes: ["large statistics"] }] },
+  });
+  const resolver = new MosaicResolver(document);
+  const json = resolver.getTileJson(["/tiles/{z}/{x}/{y}.mvt"]);
+  assert.deepEqual(Object.keys(json).sort(), [
+    "attribution", "bounds", "center", "description", "maxzoom", "minzoom",
+    "name", "scheme", "tilejson", "tiles", "vector_layers", "version",
+  ].sort());
+  assert.equal(json.name, document.metadata.name);
+  assert.equal(json.attribution, document.metadata.attribution);
+  assert.deepEqual(json.vector_layers, document.metadata.vector_layers);
+  assert.deepEqual(resolver.document.metadata.tilestats, document.metadata.tilestats);
+  const minimal = mosaic();
+  minimal.metadata = { format: "mvt" };
+  assert(!("name" in new MosaicResolver(minimal).getTileJson([])));
+});
+
 test("uses intersection, including partial coverage and touching E7 boundaries", () => {
   const document = mosaic({
     small: slice([100000000, 100000000, 200000000, 200000000], 0, 1),

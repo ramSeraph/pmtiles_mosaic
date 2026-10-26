@@ -1,6 +1,6 @@
 import { validateTile } from "./geometry.js";
 import { MosaicResolver } from "./resolver.js";
-import type { MosaicClientOptions } from "./types.js";
+import type { MosaicClientOptions, TileJSON } from "./types.js";
 
 /** Optional orchestration over caller-owned manifest loading and tile reading. */
 export class MosaicClient<T> {
@@ -22,6 +22,16 @@ export class MosaicClient<T> {
     signal?.throwIfAborted();
     this.resolver ??= new MosaicResolver(document, this.options);
     return this.resolver;
+  }
+
+  /** Build TileJSON from the cached mosaic and caller-provided tile URL templates. */
+  async getTileJson(tiles: readonly string[], signal?: AbortSignal): Promise<TileJSON> {
+    return (await this.getResolver(signal)).getTileJson(tiles);
+  }
+
+  /** MIME type for the mosaic's tiles, using the same snapshot as tile reads. */
+  async getMimeType(signal?: AbortSignal): Promise<string> {
+    return (await this.getResolver(signal)).mimeType;
   }
 
   /** Returns the first existing tile in manifest order, or undefined if absent. */

@@ -3,6 +3,52 @@ import test from "node:test";
 import { MosaicClient } from "pmtiles-mosaic";
 import { mosaic, slice } from "./helpers.mjs";
 
+test("client metadata methods share the tile reader's successful manifest snapshot", async () => {
+  let loads = 0, reads = 0;
+  const controller = new AbortController();
+  const client = new MosaicClient({
+    loadMosaic: async (signal) => {
+      assert.equal(signal, controller.signal);
+      loads++;
+      return mosaic();
+    },
+    readTile: async () => { reads++; return "tile"; },
+  });
+  const json = await client.getTileJson(["/tiles/{z}/{x}/{y}.pbf"], controller.signal);
+  assert.deepEqual(json.tiles, ["/tiles/{z}/{x}/{y}.pbf"]);
+  assert.equal(json.name, "Test map");
+  assert.equal(await client.getMimeType(), "application/vnd.mapbox-vector-tile");
+  assert.equal(loads, 1);
+  assert.equal(reads, 0);
+  assert.equal(await client.getTile(0, 0, 0), "tile");
+  assert.equal(loads, 1);
+  assert.equal(reads, 1);
+});
+
+test("client metadata methods propagate load errors and cancellation", async () => {
+  for (const read of [(c, signal) => c.getTileJson([], signal), (c, signal) => c.getMimeType(signal)]) {
+    const controller = new AbortController();
+    const signal = controller.signal;
+    let fail = true, loads = 0;
+    const client = new MosaicClient({
+      loadMosaic: async (received) => {
+        assert.equal(received, signal);
+        loads++;
+        if (fail) throw new Error("offline");
+        return mosaic();
+      },
+      readTile: async () => undefined,
+    });
+    await assert.rejects(read(client, signal), /offline/);
+    fail = false;
+    await read(client, signal);
+    assert.equal(loads, 2);
+    controller.abort();
+    await assert.rejects(read(client, signal), { name: "AbortError" });
+    assert.equal(loads, 2);
+  }
+});
+
 test("caller supplies all I/O and arbitrary tile values; missing candidates fall through", async () => {
   let loads = 0;
   const reads = [];
