@@ -11,16 +11,16 @@
       "import": "./dist/index.js"
     },
     "./linear": {
-      "types": "./dist/linear.d.ts",
-      "import": "./dist/linear.js"
+      "types": "./dist/indexers/linear.d.ts",
+      "import": "./dist/indexers/linear.js"
     },
     "./flatbush": {
-      "types": "./dist/flatbush.d.ts",
-      "import": "./dist/flatbush.js"
+      "types": "./dist/indexers/flatbush.d.ts",
+      "import": "./dist/indexers/flatbush.js"
     },
     "./partition-aware": {
-      "types": "./dist/partition-aware.d.ts",
-      "import": "./dist/partition-aware.js"
+      "types": "./dist/indexers/partition-aware.d.ts",
+      "import": "./dist/indexers/partition-aware.js"
     },
     "./package.json": "./package.json"
   },

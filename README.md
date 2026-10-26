@@ -71,9 +71,6 @@ download-mosaic \
 
 ### `partition`
 
-> [!NOTE]
-> This is a new, experimental script and may have bugs. For a more stable and well-tested option, please see `partition-basic`.
-
 This script partitions a tile source into multiple smaller PMTiles files based on a specified size limit. It uses a recursive partitioning strategy, first by zoom level, then by X, and then by Y coordinates, to create reasonably uniform partitions.
 
 ```bash
@@ -110,9 +107,6 @@ When you provide multiple `--from-source` arguments, the script combines them in
     *   The `vector_layers` metadata is handled differently. It is merged from all sources. If multiple sources define a vector layer with the same `id`, their definitions are combined. The `minzoom` will be the minimum of all definitions, and the `maxzoom` will be the maximum, effectively expanding the layer's visibility to cover the full range of all sources.
 
 ### `partition-basic`
-
-> [!NOTE]
-> This script has been in use for longer and is considered more stable and well-tested than the newer `partition` script.
 
 This is a simpler version of the partitioning script that uses a less sophisticated strategy. It first creates a "top slice" of lower zoom levels that fit within the size limit, and then partitions the remaining zoom levels into vertical (X-based) stripes. This can sometimes result in less uniform partition sizes than the `partition` script.
 

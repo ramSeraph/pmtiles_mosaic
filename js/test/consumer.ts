@@ -33,6 +33,8 @@ const value: Uint8Array | undefined = (await client.getTile(0, 0, 0))?.payload;
 const mime: string = await client.getMimeType();
 const tileJson = await client.getTileJson(["/tiles/{z}/{x}/{y}.mvt"]);
 const urls: readonly string[] = tileJson.tiles;
+// @ts-expect-error TileJSON only exposes selected serving fields, not arbitrary archive metadata.
+tileJson.generator_options;
 const pmtiles = new MosaicClient({ loadMosaic: async () => document, readTile: createPMTilesReader() });
 const bytes: ArrayBuffer | undefined = (await pmtiles.getTile(0, 0, 0))?.data;
 const simple = new PMTilesMosaic("https://example.org/map.mosaic.json", {

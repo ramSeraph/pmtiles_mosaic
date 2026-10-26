@@ -1,4 +1,4 @@
-import type { BoundsE7, ResolvedSlice, SliceIndexFactory } from "./types.js";
+import type { BoundsE7, ResolvedSlice, SliceIndexFactory } from "../types.js";
 
 type Axis = 0 | 1;
 // Leaves store the slice's original index so manifest ordering stays caller-owned.

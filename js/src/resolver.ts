@@ -1,6 +1,6 @@
 import { TileType } from "pmtiles";
 import { intersects, tileBoundsE7 } from "./geometry.js";
-import { createLinearIndex } from "./linear.js";
+import { createLinearIndex } from "./indexers/linear.js";
 import { parseMosaic } from "./validate.js";
 import type {
   MosaicDocument, ResolvedSlice, ResolverOptions, SliceIndex, SliceIndexFactory, TileJSON,
@@ -39,6 +39,7 @@ export class MosaicResolver {
   private readonly byZoom = new Map<number, ZoomState>();
   private readonly createIndex: SliceIndexFactory;
 
+  /** Validate and snapshot parsed input before constructing the resolver. */
   constructor(document: unknown, options: ResolverOptions = {}) {
     this.document = parseMosaic(document);
     this.createIndex = options.createIndex ?? createLinearIndex;

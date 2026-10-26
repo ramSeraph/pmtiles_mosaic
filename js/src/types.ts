@@ -1,7 +1,7 @@
 import { TileType, tileTypeExt } from "pmtiles";
 import type { Compression } from "pmtiles";
 
-/** Canonical PMTiles filename extensions. */
+/** Canonical PMTiles filename extensions; TileType.Jpeg uses "jpg". */
 export type TileFormat = Lowercase<Exclude<keyof typeof TileType, "Unknown" | "Jpeg">> | "jpg";
 export const TILE_FORMATS = Object.freeze(
   Object.values(TileType)
@@ -110,10 +110,12 @@ export interface TileJSON {
   readonly attribution?: string;
   readonly version?: string;
   readonly vector_layers?: readonly VectorLayer[];
-  readonly [key: string]: unknown;
 }
 
-/** Load and parse the mosaic using any transport. Only successful loads are cached. */
+/**
+ * Load and parse the mosaic using any transport; the resolver validates the result.
+ * Only successful loads are cached.
+ */
 export type MosaicLoader = (signal?: AbortSignal) => Promise<unknown>;
 
 /** Return undefined only for an absent tile; throw for storage/network failures. */

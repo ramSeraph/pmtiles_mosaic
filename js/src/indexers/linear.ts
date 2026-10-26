@@ -1,5 +1,5 @@
-import { intersects } from "./geometry.js";
-import type { SliceIndexFactory } from "./types.js";
+import { intersects } from "../geometry.js";
+import type { SliceIndexFactory } from "../types.js";
 
 /** Default index: scans the slices at a zoom without building a search structure. */
 export const createLinearIndex: SliceIndexFactory = (slices) => ({

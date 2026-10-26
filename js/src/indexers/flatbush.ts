@@ -1,5 +1,5 @@
 import Flatbush from "flatbush";
-import type { SliceIndexFactory } from "./types.js";
+import type { SliceIndexFactory } from "../types.js";
 
 /**
  * Optional plugin owning both Flatbush construction and lookup. Import from

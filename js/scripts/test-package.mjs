@@ -12,9 +12,10 @@ try {
   const [archive] = JSON.parse(run("npm", ["pack", "--json", "--ignore-scripts", "--pack-destination", scratch], root));
   const files = archive.files.map(({ path }) => path);
   for (const file of [
-    "dist/index.js", "dist/index.d.ts", "dist/linear.js", "dist/linear.d.ts",
-    "dist/flatbush.js", "dist/flatbush.d.ts",
-    "dist/partition-aware.js", "dist/partition-aware.d.ts",
+    "dist/index.js", "dist/index.d.ts",
+    "dist/indexers/linear.js", "dist/indexers/linear.d.ts",
+    "dist/indexers/flatbush.js", "dist/indexers/flatbush.d.ts",
+    "dist/indexers/partition-aware.js", "dist/indexers/partition-aware.d.ts",
     "dist/pmtiles.js", "LICENSE", "README.md",
   ]) {
     assert(files.includes(file), `Tarball must contain ${file}`);
